@@ -1,5 +1,5 @@
-from src.mdp import InventoryAction, InventoryState
-
+from ..action import InventoryAction
+from ..state import InventoryState
 from .base import CostParameters
 from .standard import StandardRewardFunction
 

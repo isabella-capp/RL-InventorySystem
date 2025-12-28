@@ -1,11 +1,8 @@
 from dataclasses import dataclass
 from typing import Protocol
 
-from src.mdp import InventoryAction, InventoryState
-
-from .factory import RewardFunctionFactory
-from .shaped import ShapedRewardFunction
-from .standard import StandardRewardFunction
+from ..action import InventoryAction
+from ..state import InventoryState
 
 
 @dataclass(frozen=True)
@@ -83,7 +80,10 @@ class RewardFunction(Protocol):
     """
 
     def __call__(
-        self, state: InventoryState, action: InventoryAction, next_state: InventoryState
+        self,
+        state: "InventoryState",
+        action: "InventoryAction",
+        next_state: "InventoryState",
     ) -> float:
         """
         Calculate reward for a state transition.
@@ -97,44 +97,3 @@ class RewardFunction(Protocol):
             Reward (negative cost in this case)
         """
         ...
-
-
-if __name__ == "__main__":
-    # Test cost parameters
-    print("Testing CostParameters...")
-    params = CostParameters()
-    print(f"Cost params: K={params.K}, i={params.i}, h={params.h}, π={params.pi}")
-    params.validate()
-    print("✓ Parameters valid")
-
-    # Test reward function
-    print("\nTesting StandardRewardFunction...")
-    from ..action import order_both_products
-    from ..state import create_initial_state
-
-    state = create_initial_state(40, 45)
-    action = order_both_products(20, 15)
-    next_state = create_initial_state(40, 45)  # Simplified for testing
-
-    reward_fn = StandardRewardFunction(params)
-    costs = reward_fn.calculate_costs(state, action)
-    print(f"Cost breakdown: {costs}")
-
-    reward = reward_fn(state, action, next_state)
-    print(f"Reward (negative cost): {reward:.2f}")
-
-    # Test shaped reward
-    print("\nTesting ShapedRewardFunction...")
-    shaped_fn = ShapedRewardFunction(params)
-    shaped_reward = shaped_fn(state, action, next_state)
-    print(f"Shaped reward: {shaped_reward:.2f}")
-    print(f"Difference from standard: {shaped_reward - reward:.2f}")
-
-    # Test factory
-    print("\nTesting RewardFunctionFactory...")
-    standard = RewardFunctionFactory.create_standard()
-    shaped = RewardFunctionFactory.create_shaped()
-    print(f"Standard reward: {standard(state, action, next_state):.2f}")
-    print(f"Shaped reward: {shaped(state, action, next_state):.2f}")
-
-    print("\n✓ All reward tests passed!")

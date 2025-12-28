@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import Tuple
 
 import numpy as np
 
@@ -167,40 +167,3 @@ def order_product_1(quantity: int) -> InventoryAction:
 def order_both_products(quantity_0: int, quantity_1: int) -> InventoryAction:
     """Order both products."""
     return InventoryAction(order_quantities=(quantity_0, quantity_1))
-
-
-if __name__ == "__main__":
-    # Test action representation
-    print("Testing InventoryAction...")
-
-    action = order_both_products(20, 30)
-    print(f"Action: {action}")
-    print(f"As array: {action.to_array()}")
-
-    # Test action space
-    print("\nTesting ActionSpace...")
-    action_space = ActionSpace(max_order_quantity=50, order_increment=10)
-    print(f"Action space: {action_space}")
-    print(f"Number of actions: {action_space.n}")
-    print(f"Possible quantities: {action_space.possible_quantities}")
-
-    # Test indexing
-    test_action = action_space.get_action(0)
-    print(f"\nAction at index 0: {test_action}")
-    print(f"Index of action: {action_space.get_index(test_action)}")
-
-    # Test sampling
-    random_action = action_space.sample()
-    print(f"Random action: {random_action}")
-
-    # Test factory
-    print("\nTesting ActionSpaceFactory...")
-    coarse = ActionSpaceFactory.create_coarse_action_space()
-    medium = ActionSpaceFactory.create_medium_action_space()
-    fine = ActionSpaceFactory.create_fine_action_space()
-
-    print(f"Coarse: {coarse.n} actions")
-    print(f"Medium: {medium.n} actions")
-    print(f"Fine: {fine.n} actions")
-
-    print("\n✓ All action tests passed!")

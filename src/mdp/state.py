@@ -168,28 +168,3 @@ def create_initial_state(
         backorders=(0, 0),
         outstanding_orders=(0, 0),
     )
-
-
-if __name__ == "__main__":
-    # Test the state representation
-    print("Testing InventoryState...")
-
-    state = create_initial_state(50, 50)
-    print(f"Initial state: {state}")
-    print(f"Inventory position product 0: {state.get_inventory_position(0)}")
-    print(f"As array: {state.to_array()}")
-
-    # Test state space
-    space = StateSpace()
-    print(f"\nState space shape: {space.shape}")
-    print(f"Is valid: {space.is_valid(state)}")
-
-    # Test normalization
-    normalized = space.normalize(state)
-    print(f"Normalized: {normalized}")
-
-    # Test sampling
-    random_state = space.sample()
-    print(f"\nRandom state: {random_state}")
-
-    print("\n✓ All state tests passed!")
