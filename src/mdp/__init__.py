@@ -1,23 +1,21 @@
-from .state import InventoryState, StateSpace, create_initial_state
-
 from .action import (
-    InventoryAction,
     ActionSpace,
     ActionSpaceFactory,
+    InventoryAction,
     no_order_action,
     order_both_products,
     order_product_0,
     order_product_1,
 )
-
 from .reward import (
     CostComponents,
     CostParameters,
     RewardFunction,
-    StandardRewardFunction,
-    ShapedRewardFunction,
     RewardFunctionFactory,
+    ShapedRewardFunction,
+    StandardRewardFunction,
 )
+from .state import InventoryState, StateSpace, create_initial_state
 
 __all__ = [
     # State

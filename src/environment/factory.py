@@ -1,4 +1,4 @@
-from ..mdp import ActionSpaceFactory, CostParameters
+from src.mdp import ActionSpaceFactory, CostParameters
 from .gym_env import InventoryEnvironment
 
 

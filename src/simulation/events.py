@@ -1,7 +1,8 @@
 from dataclasses import dataclass
-from typing import Tuple, Dict, Any
-import numpy as np
 from enum import Enum
+from typing import Any, Dict, Tuple
+
+import numpy as np
 
 
 class EventType(Enum):

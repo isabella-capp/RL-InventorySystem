@@ -1,7 +1,8 @@
 from typing import Optional
+
 from .base import CostParameters
-from .standard import StandardRewardFunction
 from .shaped import ShapedRewardFunction
+from .standard import StandardRewardFunction
 
 
 class RewardFunctionFactory:

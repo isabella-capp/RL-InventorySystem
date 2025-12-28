@@ -1,6 +1,8 @@
 from typing import Protocol
-from .events import SystemParameters
+
 import numpy as np
+
+from .events import SystemParameters
 
 
 class DemandGenerator(Protocol):

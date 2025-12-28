@@ -1,12 +1,11 @@
 from dataclasses import dataclass
 from typing import Protocol
 
-from mdp import InventoryState
-from mdp import InventoryAction
+from src.mdp import InventoryAction, InventoryState
 
-from .standard import StandardRewardFunction
-from .shaped import ShapedRewardFunction
 from .factory import RewardFunctionFactory
+from .shaped import ShapedRewardFunction
+from .standard import StandardRewardFunction
 
 
 @dataclass(frozen=True)
@@ -110,8 +109,8 @@ if __name__ == "__main__":
 
     # Test reward function
     print("\nTesting StandardRewardFunction...")
-    from ..state import create_initial_state
     from ..action import order_both_products
+    from ..state import create_initial_state
 
     state = create_initial_state(40, 45)
     action = order_both_products(20, 15)

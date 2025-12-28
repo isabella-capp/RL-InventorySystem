@@ -1,6 +1,7 @@
+from src.mdp import InventoryAction, InventoryState
+
 from .base import CostParameters
 from .standard import StandardRewardFunction
-from mdp import InventoryState, InventoryAction
 
 
 class ShapedRewardFunction(StandardRewardFunction):
