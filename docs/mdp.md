@@ -20,18 +20,22 @@ Let's define each component for our inventory management problem.
 
 ## 🎯 1. State Space ($S$)
 
-The inventory control problem is modeled as a Partially Observable Markov Decision Process (POMDP) due to the unobservable lead times. We utilize Frame Stacking to allow the agent to infer the latent state of in-transit orders.
+The underlying inventory system is a Partially Observable Markov Decision Process (POMDP) due to unobservable lead times.
+
+To enable the use of standard MDP-based reinforcement learning algorithms, we construct an augmented state representation by stacking the last $k+1$ observations.
+
+This augmented state serves as an approximate belief state, allowing the agent to infer latent dynamics and yielding a process that is approximately Markov.
 
 ### Mathematical Definition
 
 At each decision epoch $t$ (beginning of day $t$), the environment emits an observation vector $o_t \in \mathbb{R}^6$:
 
-**$o_t = \bigl(I_0^t, I_1^t, B_0^t, B_1^t, O_0^t, O_1^t\bigr)$**
+**$$o_t = \bigl(I_{t,0}, I_{t,1}, B_{t,0}, B_{t,1}, O_{t,0}, O_{t,1}\bigr)$$**
 
 Where for each product $i \in \{0, 1\}$:
-- **$I_0^t, I_1^t \in \mathbb{Z}$**: On-hand inventory levels for products 0 and 1
-- **$B_0^t, B_1^t \in \mathbb{Z}_+$**: Backlog (unsatisfied demand)
-- **$O_0^t, O_1^t \in \mathbb{Z}_+$**: Outstanding (in-transit) orders
+- **$I_{t,0}, I_{t,1} \in \mathbb{Z}$**: On-hand inventory levels for products 0 and 1
+- **$B_{t,0}, B_{t,1} \in \mathbb{Z}_+$**: Backlog (unsatisfied demand)
+- **$O_{t,0}, O_{t,1} \in \mathbb{Z}_+$**: Outstanding (in-transit) orders
 
 The **state** at time $t$ is defined as a sequence of the most recent $k+1$ observations:
 
@@ -43,8 +47,8 @@ Thus, the state is a $(k+1) \times 6$-dimensional vector, flattened when used as
 
 ### State Space Bounds
 
-**$S = \{s \mid -100 \leq I_i \leq 200, 0 \leq B_i \leq 100, 0 \leq O_i \leq 150\}$** for $i \in \{0,1\}$.  
-Note: Negative inventory means backorders ($I_i < 0 \rightarrow B_i = -I_i$)
+**$S = \{s \mid 0 \leq I_i \leq 200, 0 \leq B_i \leq 100, 0 \leq O_i \leq 150\}$** for $i \in \{0,1\}$.  
+Note: Negative inventory levels are represented implicitly through the backlog variable $B_i = \max(0, -Inv_i)$
 
 ### Inventory Position
 
@@ -73,21 +77,20 @@ The action space represents the replenishment decisions made by the agent at the
 
 At each decision epoch $t$, the agent selects an action vector $a_t \in \mathbb{N}^2$:
 
-**$a_t = (a^0_t, a^1_t)$**
+**$a_t = (a_{t,0}, a_{t,1})$**
 
 Where for each product $i \in \{0, 1\}$: 
-- $a^i_t \in \{0, 1, \dots, Z_{max}\}$: The quantity of units to order from the supplier for product $i$.
+- $a_{t,i} \in \{0, 1, \dots, Z_{max}\}$: The quantity of units to order from the supplier for product $i$.
 
 ## Action Bounds and Constraints
 
 The action space is discrete and bounded. We define a maximum order quantity $Z_{max}$ to limit the search space to a feasible range, given that demand per period is relatively low (max 4 or 5 units per day).
 
-**$$A = \{ a \in \mathbb{Z}^2 \mid 0 \le a^i \le Z_{max} \quad \forall i \in \{0, 1\} \}$$**
+**$$A = \{ a \in \mathbb{Z}^2 \mid 0 \le a_{t,i} \le Z_{max} \quad \forall i \in \{0, 1\} \}$$**
 
 In our implementation, we set $Z_{max} = 20$.
-- $a^i_t = 0$: No order is placed for product $i$ (Corresponds to "Review but do not order").
-- $a^i_t > 0$: An order of $a^i_t$ units is placed immediately.
-
+- $a_{t,i} = 0$: No order is placed for product $i$ (Corresponds to "Review but do not order").
+- $a_{t,i} > 0$: An order of $a_{t,i}$ units is placed immediately.
 
 ### Hyperparameter: Maximum Order Quantity ($Z$)
 
@@ -113,82 +116,51 @@ This represents the probability of reaching state $s'$ from state $s$ after taki
 
 The environment is stochastic and is driven by two primary sources of randomness defined in the assignment:
 
-1. **Demand ($D_{t,j}$)**
+1. **Demand ($D_{t,i}$)**
 
-The customer demand for product $j$ at time $t$ follows a discrete probability distribution:
+   **Arrivals**: Customer orders arrive according to an exponential distribution with rate $\lambda = 0.1$.
 
-- **Product 1**: D ∈ {1, 2, 3, 4} with probabilities $\{\frac{1}{5}, \frac{1}{3}, \frac{1}{3}, \frac{1}{6}\}$
-- **Product 2**: D ∈ {2, 3, 4, 5} with probabilities $\{\frac{1}{5}, \frac{1}{3}, \frac{1}{3}, \frac{1}{5}\}$
+    **Size**: Each arrival requests a specific quantity $d$ based on the product type:
 
-2. **Lead Time ($L_j$)**
+    - **Product 1**: D ∈ {1, 2, 3, 4} with probabilities $\{\frac{1}{6}, \frac{1}{3}, \frac{1}{3}, \frac{1}{6}\}$
+    - **Product 2**: D ∈ {5, 4, 3, 2} with probabilities $\{\frac{1}{8}, \frac{1}{2}, \frac{1}{4}, \frac{1}{8}\}$
 
-The time delay between placing an order and receiving it is modeled as a continuous random variable:
+2. **Lead Time ($L_i$)**
 
-1. **Product 1**: $L \sim U(0.5, 1.0)$ days
-2. **Product 2**: $L \sim U(0.2, 0.7)$ days.
+    The time delay between placing an order and receiving it is modeled as a continuous random variable:
 
-**Note:** The lead time is handled internally by the simulator and is not directly observable by the agent.
+    1. **Product 1**: $L \sim U(0.5, 1.0)$ days
+    2. **Product 2**: $L \sim U(0.2, 0.7)$ days.
+
+    **Note:** The lead time is handled internally by the simulator and is not directly observable by the agent.
+
+### State Update
+
+The transition from state $s_t$ to $s_{t+1}$ involves two distinct updates: the physical inventory update (simulation physics) and the agent's observation stack update.
+
+1. **Physical Inventory Update**
+At the beginning of day $t$, after the agent selects action $a_t = [a_{t,1}, a_{t,2}]$ (order quantities), the simulation proceeds as follows:
+    - **Order Placement** If $a_{t,i} > 0$, an order is triggered. The "On-Order" quantity increases immediately:
+      $$O_{t,i} \leftarrow O_{t,i} + a_ {t,i}$$
+      The simulator schedules a delivery event to occur at time $t + L_i$, where $L_i$ is sampled from the specific uniform distribution.
+    - **Order Arrivals (Deliveries)**: For any previously placed orders scheduled to arrive during $[t, t+1)$, the quantity $Q_{arr, i}$ represents the arriving quantity for product $i$. This quantity is added to the net inventory and removed from outstanding orders:
+    $$Inv'_{t,i} \leftarrow Inv_{t,i} + Q_{arr, i}$$
+    $$O'_{t,i} \leftarrow O_{t,i} - Q_{arr, i}$$
+    
+    - **Demand Fulfillment** The accumulated demand $D_{t,i}$ is subtracted from the net inventory:
+    $$Inv_{t+1,i} = Inv_{t,i} - D_{t,i}$$
+
+2. **Observation Construction** The agent does not see the raw $Inv_i$. Instead, the observation vector $o_{t+1}$ splits the Net Inventory ($Inv$) into On-Hand ($I$) and Backlog ($B$) components:
+For each product $i$:
+    - **On-Hand**: $I_{t+1,i} = \max(0, Inv_{t+1,i})$
+    - **Backlog**: $B_{t+1,i} = \max(0, -Inv_{t+1,i})$
+    - **Outstanding**: $O_{t+1,i}$ (Updated sum of pending orders)
+
+Resulting in the observation vector: $o_{t+1, i} = [I_{t+1,i}, B_{t+1,i}, O_{t+1,i}]$.
+
+3. **State Stack Update ($s_{t+1}$)** Finally, the full state $s_{t+1}$ is constructed by shifting the frame stack to include the newest observation and discard the oldest:$$s_{t+1} = [o_{t+1}, o_t, \dots, o_{t-k+1}]$$
 
 
-
-The transition has **stochastic** and **deterministic** components:
-
-#### 3.1 Deterministic: Order Placement
-
-When action **$a = (q₀, q₁)$** is taken:
-
-**$O'_i = O_i + q_i$** for i ∈ {0,1}
-
-Orders are placed and will arrive after a stochastic lead time.
-
-
-#### 3.3 Demand Fulfillment
-
-For each product i:
-
-**If $I_i \geq D_i^{total}$:**
-
-- $I'_i = I_i - D_i^{total}$
-- $B'_i = B_i$ (unchanged)
-
-**If $I_i < D_i^{total}$:**
-
-- $I'_i = 0$
-- $B'_i = B_i + (D_i^{total} - I_i)$
-
-#### 3.4 Stochastic: Order Arrivals
-
-Orders placed at time $\tau < t$ arrive at time $\tau + L$, where:
-
-**For Product 0:**
-
-- $L_0 \sim \text{Uniform}(0.5, 1.0)$
-
-**For Product 1:**
-
-- $L_1 \sim \text{Uniform}(0.2, 0.7)$
-
-When order of quantity Q arrives:
-
-**If $B_i > 0$:**
-
-- Fill backorders first: $B'_i = \max(0, B_i - Q)$
-- Remaining: $I'_i = I_i + \max(0, Q - B_i)$
-
-**If $B_i = 0$:**
-
-- $I'_i = I_i + Q$
-
-And update outstanding:
-
-- $O'_i = O_i - Q$
-
-### Transition Equation Summary
-
-**$s_{t+1} = T(s_t, a_t, \xi_t)$**
-Where **$\xi_t$** represents all stochastic elements:
-
-- $\xi_t = (N_t, \{D_0^{(j)}, D_1^{(j)}\}_{j=1}^{N_t}, \{L_0^{(k)}, L_1^{(k)}\}_{k \in \text{arrivals}})$
 
 ---
 
@@ -196,80 +168,49 @@ Where **$\xi_t$** represents all stochastic elements:
 
 ### Mathematical Definition
 
-The reward at time t is:
+The immediate reward $r_t$ received after taking action $a_t$ and transitioning to state $s_{t+1}$ is defined as:
 
-**$R(s_t, a_t) = -C(s_t, a_t)$**
+$$r_t = - C_{total}(t) = - \sum_{i=0}^{1} \left( C_{order}^{(i)}(t) + C_{holding}^{(i)}(t) + C_{shortage}^{(i)}(t) \right)$$
 
 We use **negative cost** as reward (minimizing cost = maximizing reward).
 
 ### Cost Components
 
-The total cost is:
+The total cost is composed of three distinct penalties defined by the assignment specifications:
 
-**$C(s, a) = C_h(s) + C_b(s) + C_o(a) + C_p(a)$**
+1. **Ordering Costs ($C_{order}$)** 
 
-#### 4.1 Holding Cost
+    Incurred whenever a replenishment order is placed with the supplier. It consists of a fixed setup cost ($K$) and a variable incremental cost ($in$) per unit ordered.
+    
+    $$C_{order}^{(i)}(t) = \begin{cases} K + in \cdot a_{t,i} & \text{if } a_{t,i} > 0 \\ 0 & \text{if } a_{t,i} = 0 \end{cases}$$
 
-**$C_h(s) = h \cdot \sum_i \max(0, I_i)$**
-Where:
+    - **Setup Cost ($K$)** Fixed cost for placing an order (e.g., administrative or transport fees).
+    - **Incremental Cost ($in$)**: Cost per unit of item purchasing.
+    
+2. **Holding Costs ($C_{holding}$)** 
+    
+    Incurred for storing inventory in the warehouse. It applies only to positive on-hand inventory levels.
+    $$C_{holding}^{(i)}(t) = h \cdot I_{t+1, i}^{+} = h \cdot \max(0, I_{t+1, i})$$
+    - **Holding Cost ($h$)**: Cost per unit per time period (e.g., storage space, insurance).
+  
+3. **Shortage Costs ($C_{shortage}$)** 
 
-- **$h = 1$**: Holding cost per unit per day
+    Incurred when demand cannot be satisfied immediately, leading to a backlog. It applies only to negative inventory levels.
 
-This penalizes keeping excess inventory.
+    $$C_{shortage}^{(i)}(t) = \pi \cdot I_{t+1, i}^{-} = \pi \cdot \max(0, -I_{t+1, i})$$
+    - **Penalty Cost ($\pi$)**: Cost per unit backlogged (e.g., loss of goodwill, expedited shipping).
 
-#### 4.2 Backorder Cost
+### Parameter Configuration
+The cost parameters specified for the assignment are as follows:
 
-**$C_b(s) = \pi \cdot \sum_i B_i$**
 
-Where:
+| Parameter         | Symbol | Value | Description                                  |
+|-------------------|--------|-------|----------------------------------------------|
+| Setup Cost        | K      | 10.0  | Fixed cost per order placed                  |
+| Incremental Cost  | i      | 3.0   | Variable cost per unit                       |
+| Holding Cost      | h      | 1.0   | Cost per unit held per day                   |
+| Shortage Cost     | pi     | 7.0   | Penalty per unit backlogged per day           |
 
-- **$\pi = 7$**: Backorder penalty per unit per day
-
-This heavily penalizes stockouts and unfulfilled demand.
-
-#### 4.3 Ordering Cost
-
-**$C_o(a) = K \cdot \sum_i \mathbb{1}\{q_i > 0\}$**
-
-Where:
-
-- **$K = 10$**: Fixed cost per order
-- **$\mathbb{1}\{\cdot\}$**: Indicator function (1 if true, 0 if false)
-  This is a fixed cost incurred when placing an order (regardless of quantity).
-
-#### 4.4 Purchase Cost
-
-**$C_p(a) = i \cdot \sum_i q_i$**
-
-Where:
-
-- **$i = 3$**: Unit purchase cost
-
-This is the variable cost of ordering units.
-
-### Total Reward
-
-**$R(s, a) = -(h \cdot \sum_i \max(0, I_i) + \pi \cdot \sum_i B_i + K \cdot \sum_i \mathbb{1}\{q_i > 0\} + i \cdot \sum_i q_i)$**
-
-### Example Calculation
-
-Given:
-
-- State: s = (I₀=40, I₁=45, B₀=0, B₁=0, O₀=0, O₁=0)
-- Action: a = (20, 15)
-
-**Costs:**
-
-- C_h = 1 × (40 + 45) = 85
-- C_b = 7 × (0 + 0) = 0
-- C_o = 10 × (1 + 1) = 20 (both products ordered)
-- C_p = 3 × (20 + 15) = 105
-
-**Total cost:** C = 85 + 0 + 20 + 105 = 210
-
-**Reward:** R = -210
-
----
 
 ## 🎲 5. Discount Factor ($\gamma$)
 
@@ -277,26 +218,39 @@ Given:
 - $γ = 0$: Only immediate reward matters (myopic/shortsighted)
 - $γ → 1$: Future rewards matter more (farsighted)
 
-Typical values:
+ ### Effective Horizon
+ 
+ The discount factor implicitly defines the "Effective Horizon" ($H_{eff}$) of the agent, which approximates how many future steps significantly influence the current decision:
+ $$H_{eff} \approx \frac{1}{1 - \gamma}$$
+ - $\gamma = 0.95$: Horizon $\approx 20$ days.
+ - $\gamma = 0.99$: Horizon $\approx 100$ days.
+ - $\gamma = 0.999$: Horizon $\approx 1000$ days.
 
-- $\gamma = 0.95$ (balances short-term and long-term)
-- $\gamma = 0.99$ (emphasizes long-term cumulative reward)
+### Application to Inventory Control
 
-The discount factor determines how much we value future rewards:
+The agent must be farsighted.
 
-## **$V(s) = \mathbb{E}[\sum_{t=0}^\infty \gamma^t R(s_t, a_t) | s_0 = s]$**
+Inventory control is inherently a long-term planning problem with delayed consequences:
+- **Lead Time Delay**: An order placed today incurs an immediate ordering cost ($K + i \cdot q$) but does not replenish inventory until $t + L$. A myopic agent would see the cost but not the benefit.
+- **Long-term Ripple Effects**: Ordering too little today $\to$ Stockouts (Shortage Costs) next week.Ordering too much today $\to$ Excess stock (Holding Costs) for potentially months.
+
+Therefore, we recommend setting $\gamma$ in the high range:
+- **Recommended Range**: $\gamma \in [0.99, 0.999]$ 
+- **Reasoning**: This ensures the agent accounts for the full cycle of ordering, waiting, and selling, preventing it from greedily avoiding setup costs at the expense of massive future shortages.
+
 
 ## 🎯 Optimization Objective
+The goal of the reinforcement learning agent is to find an optimal policy $\pi^*$ that minimizes the long-term operational cost. In the standard RL maximization framework, this is equivalent to maximizing the expected cumulative discounted reward (negative cost).
 
-### Value Function
+### Value Functions
 
 The **state value function** under policy $\pi$ is:
 
-**$V^\pi(s) = \mathbb{E}_\pi[\sum_{t=0}^\infty \gamma^t R(s_t, a_t) | s_0 = s]$**
+$$V^\pi(s) = \mathbb{E}_\pi \left[ \sum_{k=0}^\infty \gamma^k R_{t+k+1} \mid S_t = s \right]$$
 
-### Action-Value Function (Q-Function)
+The expected return taking action $a$ in state $s$, and thereafter following policy $\pi$.
 
-**$Q^\pi(s, a) = \mathbb{E}_\pi[R(s, a) + \gamma \cdot \sum_{s'} P(s'|s,a) V^\pi(s')]$**
+$$Q^\pi(s, a) = \mathbb{E}_\pi \left[ R_{t+1} + \gamma V^\pi(S_{t+1}) \mid S_t = s, A_t = a \right]$$
 
 ### Optimal Policy
 
@@ -315,20 +269,22 @@ Find policy $\pi^*$ that maximizes expected cumulative reward:
 
 ### 1. State Space
 
-- **Type**: Continuous (but discrete in units)
-- **Dimensionality**: 6
-- **Size**: Theoretically infinite, practically bounded
+  - **Nature: Partially Observable (POMDP)**. The raw observation $o_t$ does not fully capture the system state due to hidden lead times.
+  - **Resolution Strategy: Frame Stacking.** By defining the state $S_t$ as a sequence of the last 4 observations (current + 3 history), we construct a "belief state" that allows the agent to infer hidden temporal dynamics.
+  - **Dimensionality:**
+    - **Raw Observation ($o_t$):** 6 features ($2 \times$ On-Hand, $2 \times$ Backlog, $2 \times$ On-Order).
+    - **Effective State Input ($S_t$):** 24 features. Calculated as: $(k+1) \times |o_t| = 4 \times 6 = 24$
 
 ### 2. Action Space
 
-- **Type**: Discrete
+- **Type**: Multi-Discrete
 - **Dimensionality**: 2
-- **Size**: 36 to 441 (depending on discretization)
+- **Size**: With $Z_{max}=20$, the total number of unique action combinations is 441 ($21 \times 21$).
 
 ### 3. Transition Dynamics
 
 - **Type**: Stochastic
-- **Markov Property**: ✅ Yes (next state depends only on current state and action)
+- **Markov Property**: ✅ Approximately satisfied via state augmentation
 - **Model-free or Model-based**: We have access to simulator (model-based possible)
 
 ### 4. Reward
@@ -346,11 +302,11 @@ Find policy $\pi^*$ that maximizes expected cumulative reward:
 
 ## 📊 MDP Properties
 
-### Markov Property
+### Markov Property Validity
 
-**$P(s_{t+1} | s_t, a_t, s_{t-1}, a_{t-1}, ..., s_0, a_0) = P(s_{t+1} | s_t, a_t)$**
-
-✅ **Holds**: The next state depends only on the current state and action, not on history.
+$$P(S_{t+1} | S_t, A_t, S_{t-1}, A_{t-1}, \dots) \approx P(S_{t+1} | S_t, A_t)$$
+- **Raw Observation ($o_t$)**: Does NOT hold. Knowing only the current inventory and order count is insufficient to predict arrival times.
+- **Stacked State ($S_t$):** Effectively Holds. By including the history stack in $S_t$, the probability of the next state (including likely arrivals) depends almost entirely on the information contained within the current stack, approximately recovering the Markov property required for RL algorithms.
 
 ### Stationary
 
@@ -365,54 +321,18 @@ Find policy $\pi^*$ that maximizes expected cumulative reward:
 
 ---
 
-## 🧮 Special Cases and Simplifications
-
-### 1. Deterministic Demand
-
-If demand were deterministic ($D_i = \bar{d}_i$):
-
-**$s_{t+1} = T_{\text{det}}(s_t, a_t)$**
-
-This would make the problem much easier (Dynamic Programming).
-
-### 2. No Lead Time
-
-If $L_i = 0$ (orders arrive instantly):
-
-**$O'_i = 0$** always (no outstanding orders)
-
-State reduces to 4 dimensions.
-
-### 3. Independent Products
-
-If products were truly independent (no joint ordering decision):
-
-MDP would decompose into two independent 3-dimensional MDPs.
-
-### 4. Continuous Actions
-
-If we didn't discretize actions:
-
-Action space would be **$A = \mathbb{R}_+^2$** (continuous)
-
-Would require different RL algorithms (Actor-Critic, DDPG, etc.)
-
----
 
 ## 📈 Curse of Dimensionality
 
-### State Space Size
+**State Space Size**
 
-If we discretize each dimension into 10 bins:
+Even with conservative discretization (e.g., 50 bins per variable), the raw state space size is astronomical:
+$$|S_{raw}| \approx 50^6 \approx 15.6 \text{ billion states}$$
 
-**$|S| \approx 10^6 = 1,000,000$ states**
+When considering the stacked state (24 dimensions), tabular methods are strictly impossible. This necessitates Deep Reinforcement Learning (Function Approximation), where a neural network learns to generalize values across similar states.
 
-With 121 actions:
+**Action Space Implications**
 
-**$|S \times A| \approx 121,000,000$ state-action pairs**
-
-### Implications
-
-1. **Tabular Q-Learning**: Requires storing Q(s,a) for all pairs
-2. **Function Approximation**: Neural networks can generalize across states
-3. **State Abstraction**: Coarser discretization reduces complexity
+With 441 discrete action pairs:
+- **DQN**: Would require an output layer of 441 neurons (if flattened), which can be slow to converge.
+- **PPO (MultiDiscrete)**: Requires two output layers of 21 neurons each. This factorization ($2 \times 21 \ll 441$) makes PPO significantly more sample-efficient for this specific action structure.
