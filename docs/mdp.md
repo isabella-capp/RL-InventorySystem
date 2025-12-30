@@ -207,7 +207,7 @@ The cost parameters specified for the assignment are as follows:
 | Parameter         | Symbol | Value | Description                                  |
 |-------------------|--------|-------|----------------------------------------------|
 | Setup Cost        | K      | 10.0  | Fixed cost per order placed                  |
-| Incremental Cost  | i      | 3.0   | Variable cost per unit                       |
+| Incremental Cost  | in      | 3.0   | Variable cost per unit                       |
 | Holding Cost      | h      | 1.0   | Cost per unit held per day                   |
 | Shortage Cost     | pi     | 7.0   | Penalty per unit backlogged per day           |
 
