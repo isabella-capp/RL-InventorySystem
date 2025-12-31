@@ -9,6 +9,7 @@ dependencies = [
     "jupyterlab>=4.5.1",
     "matplotlib>=3.10.8",
     "numpy>=2.4.0",
+    "seaborn>=0.13.2",
     "simpy>=4.1.1",
     "torch>=2.9.1",
     "tqdm>=4.67.1",
