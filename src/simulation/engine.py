@@ -1,9 +1,11 @@
 from dataclasses import dataclass
-from typing import Tuple, List, Optional
+from typing import List, Optional, Tuple
+
 import numpy as np
 import simpy
-from src.mdp.state import Observation, create_observation
+
 from src.mdp.action import InventoryAction
+from src.mdp.state import Observation, create_observation
 
 
 @dataclass(frozen=True)
@@ -195,7 +197,7 @@ class InventorySimulation:
             lead_time: Delay before arrival
         """
         assert self.env is not None, "SimPy environment not initialized."
-        
+
         # Wait for lead time
         yield self.env.timeout(lead_time)
 

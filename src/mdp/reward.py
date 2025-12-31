@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 from typing import Optional, Protocol
-from src.mdp.state import Observation
+
 from src.mdp.action import InventoryAction
+from src.mdp.state import Observation
 
 
 @dataclass(frozen=True)
