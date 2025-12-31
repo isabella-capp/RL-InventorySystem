@@ -1,281 +1,205 @@
 from typing import Any, Dict, Optional, Tuple
-
-import gymnasium as gym
 import numpy as np
+
 from gymnasium import spaces
 
-from src.mdp import (
-    ActionSpace,
-    ActionSpaceFactory,
-    CostParameters,
+from src.mdp.state import (
     InventoryState,
-    RewardFunction,
-    RewardFunctionFactory,
     StateSpace,
     create_initial_state,
+    update_state_with_observation,
 )
-from src.simulation import SimulationEngine, SystemParameters
+from src.mdp.action import ActionSpace
+from src.mdp.reward import StandardRewardFunction, CostParameters
+from src.simulation import InventorySimulation, SystemParameters
 
 
-class InventoryEnvironment(gym.Env):
+class InventoryEnvironment:
     """
-    Gymnasium environment for two-product inventory management.
+    Gymnasium environment for inventory management with frame stacking.
 
-    This environment follows the gymnasium.Env interface:
-    - observation_space: Box space for continuous state
-    - action_space: Discrete space for order quantities
-    - reset(): Initialize episode
-    - step(action): Execute action and return (obs, reward, terminated, truncated, info)
+    Observation Space: Continuous Box((k+1)*4,) - stacked observations
+    Action Space: Discrete(n) where n = (Q_max + 1)²
 
-    The environment integrates discrete event simulation for realistic dynamics.
+    Reward: Negative cost (minimize cost = maximize reward)
     """
-
-    metadata = {"render_modes": ["human", "ansi"], "name": "InventoryManagement-v0"}
 
     def __init__(
         self,
+        k: int = 3,
+        Q_max: int = 20,
+        episode_length: int = 100,
+        gamma: float = 0.99,
         system_params: Optional[SystemParameters] = None,
         cost_params: Optional[CostParameters] = None,
-        action_space_config: Optional[ActionSpace] = None,
-        max_steps_per_episode: int = 100,
-        reward_function: Optional[RewardFunction] = None,
         random_seed: Optional[int] = None,
     ):
         """
-        Initialize the inventory management environment.
+        Initialize environment.
 
         Args:
-            system_params: System parameters (demand, lead time, etc.)
-            cost_params: Cost structure parameters
-            action_space_config: Action space configuration
-            max_steps_per_episode: Maximum decision points per episode
-            reward_function: Custom reward function (optional)
+            k: Number of historical frames to stack (default: 3)
+            Q_max: Maximum order quantity per product (default: 20)
+            episode_length: Steps per episode (default: 100)
+            gamma: Discount factor (default: 0.99)
+            system_params: Simulation parameters
+            cost_params: Cost parameters
             random_seed: Random seed for reproducibility
         """
-        super().__init__()
+        self.k = k
+        self.Q_max = Q_max
+        self.episode_length = episode_length
+        self.gamma = gamma
 
-        # Initialize parameters
+        # Initialize RNG
+        self.np_random = np.random.default_rng(random_seed)
+
+        # MDP components
+        self.state_space_config = StateSpace(k=k)
+        self.action_space_config = ActionSpace(Q_max=Q_max)
+        self.reward_function = StandardRewardFunction(cost_params or CostParameters())
+
+        # Simulation
         self.system_params = system_params or SystemParameters.create_default()
-        self.cost_params = cost_params or CostParameters()
-        self.max_steps = max_steps_per_episode
+        self.simulation = InventorySimulation(self.system_params, self.np_random)
 
-        # Set random seed
-        if random_seed is not None:
-            self._np_random = np.random.default_rng(random_seed)
-        else:
-            self._np_random = np.random.default_rng()
+        # Current state (with frame stacking)
+        self.current_state: Optional[InventoryState] = None
+        self.current_step = 0
 
-        # Initialize MDP components
-        self.state_space = StateSpace()
-        self.action_space_config = (
-            action_space_config or ActionSpaceFactory.create_medium_action_space()
-        )
-
-        # Define gymnasium spaces
-        # Observation space: continuous 6D vector (inventory, backorders, outstanding for 2 products)
+        # Gymnasium spaces
+        # Observation space: continuous (for neural networks)
+        obs_dim = (k + 1) * 4
         self.observation_space = spaces.Box(
-            low=np.array([-100, -100, 0, 0, 0, 0], dtype=np.float32),
-            high=np.array([200, 200, 100, 100, 150, 150], dtype=np.float32),
-            dtype=np.float32,
+            low=-np.inf, high=np.inf, shape=(obs_dim,), dtype=np.float32
         )
 
-        # Action space: discrete indices into action_space_config
+        # Action space: discrete
         self.action_space = spaces.Discrete(self.action_space_config.n)
 
-        # Initialize reward function
-        self.reward_function = reward_function or RewardFunctionFactory.create_standard(
-            self.cost_params
-        )
-
-        # Initialize simulation engine
-        self.simulation = SimulationEngine(
-            system_params=self.system_params, random_state=self._np_random
-        )
-
-        # Episode tracking
-        self.current_state: Optional[InventoryState] = None
-        self.steps_taken = 0
+        # Episode statistics
         self.episode_costs = []
+        self.episode_rewards = []
 
     def reset(
         self, seed: Optional[int] = None, options: Optional[Dict[str, Any]] = None
     ) -> Tuple[np.ndarray, Dict[str, Any]]:
         """
-        Reset the environment to initial state.
+        Reset environment to initial state.
 
         Args:
-            seed: Random seed for this episode
-            options: Additional options (e.g., initial inventory levels)
+            seed: Random seed
+            options: Additional options
 
         Returns:
-            observation: Initial state as numpy array
-            info: Additional information dictionary
+            (observation_array, info_dict)
         """
-        # Handle seed
+        # Set seed if provided
         if seed is not None:
-            self._np_random = np.random.default_rng(seed)
-            self.simulation.set_random_state(self._np_random)
+            self.np_random = np.random.default_rng(seed)
+            self.simulation = InventorySimulation(self.system_params, self.np_random)
 
-        # Get initial inventory from options or use default
-        initial_inv_0 = 50
-        initial_inv_1 = 50
-        if options and "initial_inventory" in options:
-            initial_inv_0, initial_inv_1 = options["initial_inventory"]
-
-        # Reset state
-        self.current_state = create_initial_state(initial_inv_0, initial_inv_1)
-        self.steps_taken = 0
-        self.episode_costs = []
+        # Create initial state (same observation repeated k+1 times)
+        initial_net_inv_0 = 50
+        initial_net_inv_1 = 50
+        self.current_state = create_initial_state(
+            net_inventory_0=initial_net_inv_0,
+            net_inventory_1=initial_net_inv_1,
+            k=self.k,
+        )
 
         # Reset simulation
-        self.simulation.reset(initial_state=self.current_state)
+        self.simulation.reset(self.current_state.current_observation)
 
-        # Prepare info
-        info = {"initial_state": self.current_state, "episode": 0}
+        # Reset counters
+        self.current_step = 0
+        self.episode_costs = []
+        self.episode_rewards = []
 
-        return self.current_state.to_array(), info
+        # Return observation
+        obs = self.current_state.to_array()
+        info = {
+            "step": self.current_step,
+            "net_inventory": self.current_state.current_observation.net_inventory,
+            "outstanding": self.current_state.current_observation.outstanding_orders,
+        }
 
-    def step(
-        self, action_index: int
-    ) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
+        return obs, info
+
+    def step(self, action: int) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
         """
-        Execute one step in the environment.
+        Execute one step.
 
         Args:
-            action_index: Index into the discrete action space
+            action: Action index
 
         Returns:
-            observation: Next state as numpy array
-            reward: Reward for this transition
-            terminated: Whether episode is finished (natural ending)
-            truncated: Whether episode is cut off (max steps reached)
-            info: Additional information
+            (observation, reward, terminated, truncated, info)
         """
         if self.current_state is None:
-            raise RuntimeError("Environment not reset. Call reset() before step().")
+            raise RuntimeError("Must call reset() before step()")
 
         # Convert action index to action object
-        action = self.action_space_config.get_action(action_index)
+        action_obj = self.action_space_config.get_action(action)
 
-        # Execute action in simulation and get next state
-        next_state, transition_info = self.simulation.execute_daily_decision(
-            current_state=self.current_state, action=action
-        )
+        # Execute in simulation
+        next_obs, sim_info = self.simulation.execute_daily_decision(action_obj)
 
         # Calculate reward
-        reward = self.reward_function(self.current_state, action, next_state)
+        reward = self.reward_function(next_obs, action_obj)
+        cost = -reward
 
-        # Track costs for analysis
-        cost = -reward  # Convert reward back to cost
+        # Update state with frame stacking
+        self.current_state = update_state_with_observation(self.current_state, next_obs)
+
+        # Update counters
+        self.current_step += 1
         self.episode_costs.append(cost)
+        self.episode_rewards.append(reward)
 
-        # Update state
-        self.current_state = next_state
-        self.steps_taken += 1
+        # Check termination
+        terminated = False  # No natural termination
+        truncated = self.current_step >= self.episode_length
 
-        # Check termination conditions
-        terminated = False  # Could add conditions like bankruptcy
-        truncated = self.steps_taken >= self.max_steps
-
-        # Prepare info dictionary
+        # Build info
         info = {
-            "state": next_state,
-            "action": action,
+            "step": self.current_step,
             "cost": cost,
-            "steps": self.steps_taken,
-            "cumulative_cost": sum(self.episode_costs),
-            "transition_info": transition_info,
+            "reward": reward,
+            "net_inventory": next_obs.net_inventory,
+            "outstanding": next_obs.outstanding_orders,
+            "num_customers": sim_info["num_customers"],
+            "total_demand": sim_info["total_demand"],
         }
 
-        return next_state.to_array(), reward, terminated, truncated, info
+        if truncated:
+            info["episode"] = {
+                "r": sum(self.episode_rewards),
+                "l": self.current_step,
+                "total_cost": sum(self.episode_costs),
+                "avg_cost": np.mean(self.episode_costs),
+            }
 
-    def render(self, mode: str = "human") -> Optional[str]:
-        """
-        Render the environment state.
+        return self.current_state.to_array(), reward, terminated, truncated, info
 
-        Args:
-            mode: Rendering mode ("human" or "ansi")
-
-        Returns:
-            String representation if mode="ansi", None otherwise
-        """
+    def get_current_state(self) -> InventoryState:
+        """Get current state object (for analysis)."""
         if self.current_state is None:
-            return "Environment not initialized"
-
-        output = []
-        output.append("=" * 60)
-        output.append(f"Inventory Management Environment (Step {self.steps_taken})")
-        output.append("=" * 60)
-
-        # State information
-        output.append("\nCurrent State:")
-        output.append(
-            f"  Product 0: Inventory={self.current_state.inventory_levels[0]:3d}, "
-            f"Backorders={self.current_state.backorders[0]:3d}, "
-            f"Outstanding={self.current_state.outstanding_orders[0]:3d}"
-        )
-        output.append(
-            f"  Product 1: Inventory={self.current_state.inventory_levels[1]:3d}, "
-            f"Backorders={self.current_state.backorders[1]:3d}, "
-            f"Outstanding={self.current_state.outstanding_orders[1]:3d}"
-        )
-
-        # Inventory positions
-        output.append("\nInventory Positions:")
-        output.append(f"  Product 0: {self.current_state.get_inventory_position(0):3d}")
-        output.append(f"  Product 1: {self.current_state.get_inventory_position(1):3d}")
-
-        # Episode statistics
-        if self.episode_costs:
-            output.append("\nEpisode Statistics:")
-            output.append(f"  Total Cost: ${sum(self.episode_costs):.2f}")
-            output.append(f"  Average Cost/Step: ${np.mean(self.episode_costs):.2f}")
-
-        output.append("=" * 60)
-
-        result = "\n".join(output)
-
-        if mode == "human":
-            print(result)
-            return None
-        elif mode == "ansi":
-            return result
-        else:
-            raise ValueError(f"Unsupported render mode: {mode}")
-
-    def close(self):
-        """Clean up resources."""
-        pass
-
-    # Additional utility methods
-
-    def get_current_state(self) -> Optional[InventoryState]:
-        """Get current state object."""
+            raise RuntimeError("Must call reset() first")
         return self.current_state
 
-    def get_episode_statistics(self) -> Dict[str, Any]:
-        """Get statistics for the current episode."""
-        if not self.episode_costs:
-            return {}
+    def render(self):
+        """Render current state (optional)."""
+        if self.current_state is None:
+            return
 
-        return {
-            "total_cost": sum(self.episode_costs),
-            "average_cost": np.mean(self.episode_costs),
-            "std_cost": np.std(self.episode_costs),
-            "min_cost": min(self.episode_costs),
-            "max_cost": max(self.episode_costs),
-            "steps": self.steps_taken,
-        }
-
-
-# Register with gymnasium (optional, but recommended)
-def register_environment():
-    """Register the environment with gymnasium."""
-    try:
-        gym.register(
-            id="InventoryManagement-v0",
-            entry_point="src.environment.gym_env:InventoryEnvironment",
-            max_episode_steps=100,
+        obs = self.current_state.current_observation
+        print(f"Step {self.current_step}:")
+        print(
+            f"  Product 0: net_inv={obs.net_inventory[0]:4d}, outstanding={obs.outstanding_orders[0]:3d}"
         )
-    except gym.error.Error:
-        pass  # Already registered
+        print(
+            f"  Product 1: net_inv={obs.net_inventory[1]:4d}, outstanding={obs.outstanding_orders[1]:3d}"
+        )
+        if self.episode_costs:
+            print(f"  Last cost: ${self.episode_costs[-1]:.2f}")

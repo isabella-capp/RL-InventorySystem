@@ -1,170 +1,258 @@
 from dataclasses import dataclass
-from typing import Tuple
-
+from typing import Tuple, Optional
 import numpy as np
+from numpy.typing import NDArray
 
 
 @dataclass(frozen=True)
-class InventoryState:
+class Observation:
     """
-    Immutable state representation for the two-product inventory system.
+    Single time-step observation of the inventory system.
 
-    State Space:
-    - inventory_levels: (product_0, product_1) - on-hand inventory
-    - backorders: (product_0, product_1) - unfulfilled demand
-    - outstanding_orders: (product_0, product_1) - orders in transit
+    Represents the system state at one decision epoch.
 
-    Inventory Position = inventory_level - backorders + outstanding_orders
-
-    Using frozen dataclass ensures immutability (important for RL state transitions).
+    Attributes:
+        net_inventory: Tuple of net inventory levels (I_0, I_1) where:
+            - Positive: on-hand inventory
+            - Negative: backorders (unfulfilled demand)
+        outstanding_orders: Tuple of outstanding order quantities (O_0, O_1)
     """
 
-    inventory_levels: Tuple[int, int]
-    backorders: Tuple[int, int]
+    net_inventory: Tuple[int, int]
     outstanding_orders: Tuple[int, int]
 
-    def __post_init__(self):
-        """Validate state constraints."""
-        if len(self.inventory_levels) != 2:
-            raise ValueError("Must have exactly 2 products")
-        if len(self.backorders) != 2:
-            raise ValueError("Must have exactly 2 products")
-        if len(self.outstanding_orders) != 2:
-            raise ValueError("Must have exactly 2 products")
-
-        # Backorders should be non-negative
-        if any(bo < 0 for bo in self.backorders):
-            raise ValueError("Backorders cannot be negative")
-
-        # Outstanding orders should be non-negative
-        if any(out < 0 for out in self.outstanding_orders):
-            raise ValueError("Outstanding orders cannot be negative")
-
-    def get_inventory_position(self, product_id: int) -> int:
-        """
-        Calculate inventory position for a product.
-
-        Inventory Position = On-hand - Backorders + Outstanding
-        This is the key metric for reorder decisions.
-        """
-        return (
-            self.inventory_levels[product_id]
-            - self.backorders[product_id]
-            + self.outstanding_orders[product_id]
-        )
-
-    def to_array(self) -> np.ndarray:
-        """Convert state to numpy array for neural network input."""
+    def to_array(self) -> NDArray[np.float32]:
+        """Convert observation to numpy array [I_0, O_0, I_1, O_1]."""
         return np.array(
             [
-                self.inventory_levels[0],
-                self.inventory_levels[1],
-                self.backorders[0],
-                self.backorders[1],
+                self.net_inventory[0],
                 self.outstanding_orders[0],
+                self.net_inventory[1],
                 self.outstanding_orders[1],
             ],
             dtype=np.float32,
         )
 
-    def to_tuple(self) -> Tuple:
-        """Convert to tuple for use as dictionary key (for tabular Q-learning)."""
-        return (self.inventory_levels, self.backorders, self.outstanding_orders)
+    def get_on_hand_inventory(self, product_id: int) -> int:
+        """Get on-hand inventory for a product (max(0, net_inventory))."""
+        return max(0, self.net_inventory[product_id])
 
-    @classmethod
-    def from_array(cls, array: np.ndarray) -> "InventoryState":
-        """Create state from numpy array."""
-        return cls(
-            inventory_levels=(int(array[0]), int(array[1])),
-            backorders=(int(array[2]), int(array[3])),
-            outstanding_orders=(int(array[4]), int(array[5])),
-        )
+    def get_backorders(self, product_id: int) -> int:
+        """Get backorders for a product (max(0, -net_inventory))."""
+        return max(0, -self.net_inventory[product_id])
 
-    def __repr__(self) -> str:
-        return (
-            f"InventoryState(inv={self.inventory_levels}, "
-            f"bo={self.backorders}, out={self.outstanding_orders})"
-        )
+    def get_inventory_position(self, product_id: int) -> int:
+        """
+        Get inventory position for a product.
+
+        IP = Net_Inventory + Outstanding_Orders
+
+        Note: Net_Inventory already accounts for backorders (I - B),
+        so IP = (I - B) + O = I - B + O
+        """
+        return self.net_inventory[product_id] + self.outstanding_orders[product_id]
+
+
+@dataclass(frozen=True)
+class InventoryState:
+    """
+    Full MDP state using frame stacking.
+
+    State is a sequence of k+1 recent observations to approximate Markov property.
+
+    Attributes:
+        observations: List of observations [o_t, o_{t-1}, ..., o_{t-k}]
+            Ordered from most recent (index 0) to oldest (index k)
+    """
+
+    observations: Tuple[Observation, ...]  # Immutable sequence
+
+    def __post_init__(self):
+        """Validate state."""
+        if len(self.observations) == 0:
+            raise ValueError("State must contain at least one observation")
+
+    @property
+    def k(self) -> int:
+        """Get frame stack depth (number of historical frames)."""
+        return len(self.observations) - 1
+
+    @property
+    def current_observation(self) -> Observation:
+        """Get the most recent observation (o_t)."""
+        return self.observations[0]
+
+    def to_array(self) -> NDArray[np.float32]:
+        """
+        Convert state to flat numpy array.
+
+        Returns:
+            1D array of shape ((k+1) * 4,) containing all stacked observations
+        """
+        return np.concatenate([obs.to_array() for obs in self.observations])
+
+    @property
+    def shape(self) -> Tuple[int]:
+        """Get shape of state array."""
+        return (len(self.observations) * 4,)
+
+    def get_on_hand_inventory(self, product_id: int) -> int:
+        """Get current on-hand inventory for a product."""
+        return self.current_observation.get_on_hand_inventory(product_id)
+
+    def get_backorders(self, product_id: int) -> int:
+        """Get current backorders for a product."""
+        return self.current_observation.get_backorders(product_id)
+
+    def get_outstanding_orders(self, product_id: int) -> int:
+        """Get current outstanding orders for a product."""
+        return self.current_observation.outstanding_orders[product_id]
+
+    def get_inventory_position(self, product_id: int) -> int:
+        """Get current inventory position for a product."""
+        return self.current_observation.get_inventory_position(product_id)
 
 
 class StateSpace:
     """
-    Defines the state space boundaries and provides utility methods.
+    Configuration for the state space.
 
-    This follows the Open-Closed Principle: open for extension,
-    closed for modification.
+    Defines bounds, normalization parameters, and utility functions.
     """
 
     def __init__(
         self,
-        max_inventory: int = 200,
-        max_backorders: int = 100,
+        k: int = 3,
+        net_inventory_min: int = -100,
+        net_inventory_max: int = 200,
         max_outstanding: int = 150,
     ):
-        self.max_inventory = max_inventory
-        self.max_backorders = max_backorders
+        """
+        Initialize state space configuration.
+
+        Args:
+            k: Number of historical frames to stack (default: 3)
+            net_inventory_min: Minimum net inventory (backorder limit)
+            net_inventory_max: Maximum net inventory (on-hand limit)
+            max_outstanding: Maximum outstanding orders
+        """
+        self.k = k
+        self.net_inventory_min = net_inventory_min
+        self.net_inventory_max = net_inventory_max
         self.max_outstanding = max_outstanding
 
-        # For neural networks - normalization parameters
-        self.obs_mean = np.array([50, 50, 5, 5, 20, 20], dtype=np.float32)
-        self.obs_std = np.array([40, 40, 15, 15, 30, 30], dtype=np.float32)
+        # State dimension: (k+1) observations × 4 features per observation
+        self.dim = (k + 1) * 4
 
-    def normalize(self, state: InventoryState) -> np.ndarray:
-        """Normalize state for neural network input."""
-        obs = state.to_array()
-        return (obs - self.obs_mean) / (self.obs_std + 1e-8)
+    @property
+    def shape(self) -> Tuple[int]:
+        """Get shape of state space."""
+        return (self.dim,)
 
-    def denormalize(self, normalized: np.ndarray) -> InventoryState:
-        """Denormalize from neural network output."""
-        obs = normalized * self.obs_std + self.obs_mean
-        return InventoryState.from_array(obs)
-
-    def is_valid(self, state: InventoryState) -> bool:
-        """Check if state is within valid bounds."""
-        for inv in state.inventory_levels:
-            if inv < -self.max_backorders or inv > self.max_inventory:
+    def is_valid_observation(self, obs: Observation) -> bool:
+        """Check if observation is within bounds."""
+        for net_inv, outstanding in zip(obs.net_inventory, obs.outstanding_orders):
+            if net_inv < self.net_inventory_min or net_inv > self.net_inventory_max:
                 return False
-        for bo in state.backorders:
-            if bo < 0 or bo > self.max_backorders:
-                return False
-        for out in state.outstanding_orders:
-            if out < 0 or out > self.max_outstanding:
+            if outstanding < 0 or outstanding > self.max_outstanding:
                 return False
         return True
 
-    @property
-    def shape(self) -> Tuple[int, ...]:
-        """Shape of the state space (for gymnasium compatibility)."""
-        return (6,)
+    def is_valid_state(self, state: InventoryState) -> bool:
+        """Check if state is valid."""
+        if len(state.observations) != self.k + 1:
+            return False
+        return all(self.is_valid_observation(obs) for obs in state.observations)
 
-    def sample(self) -> InventoryState:
-        """Sample a random valid state (useful for testing)."""
-        return InventoryState(
-            inventory_levels=(
-                np.random.randint(0, self.max_inventory),
-                np.random.randint(0, self.max_inventory),
-            ),
-            backorders=(
-                np.random.randint(0, self.max_backorders // 2),
-                np.random.randint(0, self.max_backorders // 2),
-            ),
-            outstanding_orders=(
-                np.random.randint(0, self.max_outstanding // 2),
-                np.random.randint(0, self.max_outstanding // 2),
-            ),
+    def sample_observation(
+        self, random_state: Optional[np.random.Generator] = None
+    ) -> Observation:
+        """Sample a random valid observation."""
+        if random_state is None:
+            random_state = np.random.default_rng()
+
+        net_inv_0 = random_state.integers(
+            self.net_inventory_min, self.net_inventory_max + 1
         )
+        net_inv_1 = random_state.integers(
+            self.net_inventory_min, self.net_inventory_max + 1
+        )
+        out_0 = random_state.integers(0, self.max_outstanding + 1)
+        out_1 = random_state.integers(0, self.max_outstanding + 1)
+
+        return Observation(
+            net_inventory=(int(net_inv_0), int(net_inv_1)),
+            outstanding_orders=(int(out_0), int(out_1)),
+        )
+
+    def sample_state(
+        self, random_state: Optional[np.random.Generator] = None
+    ) -> InventoryState:
+        """Sample a random valid state with frame stacking."""
+        observations = tuple(
+            self.sample_observation(random_state) for _ in range(self.k + 1)
+        )
+        return InventoryState(observations=observations)
+
+
+def create_observation(
+    net_inventory_0: int,
+    net_inventory_1: int,
+    outstanding_0: int = 0,
+    outstanding_1: int = 0,
+) -> Observation:
+    """
+    Convenience function to create an observation.
+
+    Args:
+        net_inventory_0: Net inventory for product 0
+        net_inventory_1: Net inventory for product 1
+        outstanding_0: Outstanding orders for product 0
+        outstanding_1: Outstanding orders for product 1
+
+    Returns:
+        Observation object
+    """
+    return Observation(
+        net_inventory=(net_inventory_0, net_inventory_1),
+        outstanding_orders=(outstanding_0, outstanding_1),
+    )
 
 
 def create_initial_state(
-    inventory_0: int = 50, inventory_1: int = 50
+    net_inventory_0: int = 50, net_inventory_1: int = 50, k: int = 3
 ) -> InventoryState:
     """
-    Factory function to create initial state.
+    Create an initial state with the same observation repeated k+1 times.
 
-    Following the Factory Pattern for object creation.
+    This is used at the start of an episode before history is built up.
+
+    Args:
+        net_inventory_0: Initial net inventory for product 0
+        net_inventory_1: Initial net inventory for product 1
+        k: Number of historical frames
+
+    Returns:
+        Initial state with stacked observations
     """
-    return InventoryState(
-        inventory_levels=(inventory_0, inventory_1),
-        backorders=(0, 0),
-        outstanding_orders=(0, 0),
-    )
+    initial_obs = create_observation(net_inventory_0, net_inventory_1, 0, 0)
+    observations = tuple(initial_obs for _ in range(k + 1))
+    return InventoryState(observations=observations)
+
+
+def update_state_with_observation(
+    state: InventoryState, new_observation: Observation
+) -> InventoryState:
+    """
+    Create new state by adding a new observation and dropping the oldest.
+
+    Args:
+        state: Current state
+        new_observation: New observation to add
+
+    Returns:
+        New state with updated observation stack
+    """
+    # Add new observation at the front, drop the last one
+    new_observations = (new_observation,) + state.observations[:-1]
+    return InventoryState(observations=new_observations)

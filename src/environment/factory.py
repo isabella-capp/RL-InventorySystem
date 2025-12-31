@@ -1,40 +1,34 @@
-from src.mdp import ActionSpaceFactory, CostParameters
-
-from .gym_env import InventoryEnvironment
+from src.environment.gym_env import InventoryEnvironment
 
 
 class InventoryEnvironmentFactory:
-    """
-    Factory for creating pre-configured environments.
-
-    Follows the Factory Pattern for convenient environment creation.
-    """
+    """Factory for creating environment configurations."""
 
     @staticmethod
     def create_default() -> InventoryEnvironment:
-        """Create environment with default settings."""
-        return InventoryEnvironment()
+        """Create environment with default parameters."""
+        return InventoryEnvironment(k=3, Q_max=20, episode_length=100, gamma=0.99)
 
     @staticmethod
-    def create_quick_training() -> InventoryEnvironment:
-        """Create environment optimized for quick training (coarse actions)."""
-        action_space = ActionSpaceFactory.create_coarse_action_space()
-        return InventoryEnvironment(
-            action_space_config=action_space, max_steps_per_episode=50
-        )
+    def create_short_horizon(gamma: float = 0.95) -> InventoryEnvironment:
+        """Create environment with short horizon (γ=0.95)."""
+        return InventoryEnvironment(k=3, Q_max=20, episode_length=100, gamma=gamma)
 
     @staticmethod
-    def create_detailed() -> InventoryEnvironment:
-        """Create environment with fine-grained actions."""
-        action_space = ActionSpaceFactory.create_fine_action_space()
-        return InventoryEnvironment(
-            action_space_config=action_space, max_steps_per_episode=100
-        )
+    def create_long_horizon(gamma: float = 0.999) -> InventoryEnvironment:
+        """Create environment with long horizon (γ=0.999)."""
+        return InventoryEnvironment(k=3, Q_max=20, episode_length=100, gamma=gamma)
 
     @staticmethod
-    def create_with_custom_costs(
-        K: float, i: float, h: float, pi: float
+    def create_small_action_space(Q_max: int = 10) -> InventoryEnvironment:
+        """Create environment with smaller action space."""
+        return InventoryEnvironment(k=3, Q_max=Q_max, episode_length=100, gamma=0.99)
+
+    @staticmethod
+    def create_for_training(
+        k: int = 3, Q_max: int = 20, gamma: float = 0.99, episode_length: int = 100
     ) -> InventoryEnvironment:
-        """Create environment with custom cost parameters."""
-        cost_params = CostParameters(K=K, i=i, h=h, pi=pi)
-        return InventoryEnvironment(cost_params=cost_params)
+        """Create environment with custom hyperparameters."""
+        return InventoryEnvironment(
+            k=k, Q_max=Q_max, episode_length=episode_length, gamma=gamma
+        )

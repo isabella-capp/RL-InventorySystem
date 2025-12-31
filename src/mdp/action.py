@@ -1,169 +1,106 @@
 from dataclasses import dataclass
-from typing import Tuple
-
+from typing import Tuple, List, Optional
 import numpy as np
 
 
 @dataclass(frozen=True)
 class InventoryAction:
     """
-    Immutable action representation for ordering decisions.
+    Represents a replenishment decision.
 
-    Action Space:
-    - order_quantities: (product_0_qty, product_1_qty)
-
-    Each quantity represents units to order for that product.
-    Zero means no order is placed.
+    Attributes:
+        order_quantities: Tuple (q_0, q_1) where q_j ∈ [0, Q_max]
     """
 
     order_quantities: Tuple[int, int]
 
     def __post_init__(self):
-        """Validate action constraints."""
+        """Validate action."""
         if len(self.order_quantities) != 2:
-            raise ValueError("Must specify order quantity for exactly 2 products")
-
-        if any(qty < 0 for qty in self.order_quantities):
-            raise ValueError("Order quantities cannot be negative")
-
-    def to_array(self) -> np.ndarray:
-        """Convert action to numpy array."""
-        return np.array(self.order_quantities, dtype=np.int32)
-
-    def to_tuple(self) -> Tuple[int, int]:
-        """Convert to tuple for indexing."""
-        return self.order_quantities
-
-    @classmethod
-    def from_array(cls, array: np.ndarray) -> "InventoryAction":
-        """Create action from numpy array."""
-        return cls(order_quantities=(int(array[0]), int(array[1])))
-
-    def __repr__(self) -> str:
-        return f"InventoryAction(order={self.order_quantities})"
+            raise ValueError("Action must have exactly 2 order quantities")
+        for q in self.order_quantities:
+            if q < 0:
+                raise ValueError(f"Order quantity cannot be negative: {q}")
 
 
 class ActionSpace:
     """
-    Defines the action space with discrete order quantities.
+    Discrete action space for inventory management.
 
-    Actions are discretized to make the problem tractable for Q-learning.
-    For each product, we can order 0, increment, 2*increment, ..., max_quantity.
-
-    This follows the Strategy Pattern - different discretization strategies
-    can be implemented.
+    Each product can be ordered in quantities from 0 to Q_max.
+    Total action space size: (Q_max + 1)²
     """
 
-    def __init__(self, max_order_quantity: int = 100, order_increment: int = 5):
+    def __init__(self, Q_max: int = 20):
         """
+        Initialize action space.
+
         Args:
-            max_order_quantity: Maximum units that can be ordered at once
-            order_increment: Discretization step (e.g., 5 means orders of 0, 5, 10, 15, ...)
+            Q_max: Maximum order quantity per product (default: 20)
         """
-        self.max_order_quantity = max_order_quantity
-        self.order_increment = order_increment
+        if Q_max <= 0:
+            raise ValueError(f"Q_max must be positive, got {Q_max}")
 
-        # Generate possible order quantities for a single product
-        self.possible_quantities = list(
-            range(0, max_order_quantity + 1, order_increment)
-        )
+        self.Q_max = Q_max
+        self.possible_quantities = list(range(Q_max + 1))
 
-        # Generate all possible actions (Cartesian product)
-        self.actions = [
-            InventoryAction(order_quantities=(q0, q1))
-            for q0 in self.possible_quantities
-            for q1 in self.possible_quantities
-        ]
+        # Generate all possible actions
+        self.actions: List[InventoryAction] = []
+        self.action_to_index: dict = {}
 
-        # Create index mapping for fast lookup
-        self.action_to_idx = {action: idx for idx, action in enumerate(self.actions)}
+        idx = 0
+        for q0 in self.possible_quantities:
+            for q1 in self.possible_quantities:
+                action = InventoryAction(order_quantities=(q0, q1))
+                self.actions.append(action)
+                self.action_to_index[action] = idx
+                idx += 1
 
-    @property
-    def n(self) -> int:
-        """Number of discrete actions (for compatibility with gymnasium)."""
-        return len(self.actions)
+        self.n = len(self.actions)
+
+    def sample(
+        self, random_state: Optional[np.random.Generator] = None
+    ) -> InventoryAction:
+        """Sample a random action."""
+        if random_state is None:
+            random_state = np.random.default_rng()
+        idx = random_state.integers(0, self.n)
+        return self.actions[idx]
 
     def get_action(self, index: int) -> InventoryAction:
         """Get action by index."""
-        if index < 0 or index >= self.n:
-            raise IndexError(f"Action index {index} out of range [0, {self.n})")
+        if not 0 <= index < self.n:
+            raise ValueError(f"Index {index} out of range [0, {self.n})")
         return self.actions[index]
 
     def get_index(self, action: InventoryAction) -> int:
         """Get index of an action."""
-        return self.action_to_idx[action]
+        if action not in self.action_to_index:
+            raise ValueError(f"Action {action} not in action space")
+        return self.action_to_index[action]
 
-    def sample(self) -> InventoryAction:
-        """Sample a random action."""
-        return self.actions[np.random.randint(0, self.n)]
-
-    def contains(self, action: InventoryAction) -> bool:
-        """Check if action is in the action space."""
-        return action in self.action_to_idx
-
-    def clip(self, quantities: Tuple[int, int]) -> InventoryAction:
-        """
-        Clip continuous quantities to valid discrete action.
-        Useful for continuous control methods.
-        """
-        clipped = tuple(
-            min(self.possible_quantities, key=lambda x: abs(x - qty))
-            for qty in quantities
-        )
-        return InventoryAction(order_quantities=clipped)  # type: ignore #TODO fix
-
-    def __repr__(self) -> str:
+    def is_valid(self, action: InventoryAction) -> bool:
+        """Check if action is valid."""
         return (
-            f"ActionSpace(n={self.n}, "
-            f"max_order={self.max_order_quantity}, "
-            f"increment={self.order_increment})"
+            0 <= action.order_quantities[0] <= self.Q_max
+            and 0 <= action.order_quantities[1] <= self.Q_max
         )
-
-
-class ActionSpaceFactory:
-    """
-    Factory for creating different action space configurations.
-
-    Follows the Factory Pattern for flexible action space creation.
-    """
-
-    @staticmethod
-    def create_coarse_action_space() -> ActionSpace:
-        """Coarse discretization (fewer actions, faster learning)."""
-        return ActionSpace(max_order_quantity=100, order_increment=20)
-
-    @staticmethod
-    def create_medium_action_space() -> ActionSpace:
-        """Medium discretization (balanced)."""
-        return ActionSpace(max_order_quantity=100, order_increment=10)
-
-    @staticmethod
-    def create_fine_action_space() -> ActionSpace:
-        """Fine discretization (more precision, slower learning)."""
-        return ActionSpace(max_order_quantity=100, order_increment=5)
-
-    @staticmethod
-    def create_custom_action_space(max_order: int, increment: int) -> ActionSpace:
-        """Custom discretization."""
-        return ActionSpace(max_order_quantity=max_order, order_increment=increment)
-
-
-# Action construction helpers
-def no_order_action() -> InventoryAction:
-    """Create action with no orders."""
-    return InventoryAction(order_quantities=(0, 0))
-
-
-def order_product_0(quantity: int) -> InventoryAction:
-    """Order only product 0."""
-    return InventoryAction(order_quantities=(quantity, 0))
-
-
-def order_product_1(quantity: int) -> InventoryAction:
-    """Order only product 1."""
-    return InventoryAction(order_quantities=(0, quantity))
 
 
 def order_both_products(quantity_0: int, quantity_1: int) -> InventoryAction:
-    """Order both products."""
+    """
+    Convenience function to create an action.
+
+    Args:
+        quantity_0: Order quantity for product 0
+        quantity_1: Order quantity for product 1
+
+    Returns:
+        InventoryAction object
+    """
     return InventoryAction(order_quantities=(quantity_0, quantity_1))
+
+
+def no_order_action() -> InventoryAction:
+    """Create a no-order action (0, 0)."""
+    return InventoryAction(order_quantities=(0, 0))

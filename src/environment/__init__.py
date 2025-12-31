@@ -1,8 +1,7 @@
 from .factory import InventoryEnvironmentFactory
-from .gym_env import InventoryEnvironment, register_environment
+from .gym_env import InventoryEnvironment
 
 __all__ = [
     "InventoryEnvironment",
     "InventoryEnvironmentFactory",
-    "register_environment",
 ]
