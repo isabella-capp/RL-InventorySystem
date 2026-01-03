@@ -5,21 +5,25 @@ import numpy as np
 from gymnasium import spaces
 
 from src.mdp.action import ActionSpace
-from src.mdp.reward import CostParameters, StandardRewardFunction
+from src.mdp.reward import CostParameters, RewardFunction
 from src.mdp.state import (
-    InventoryState,
+    State,
+    StateHistory,
     StateSpace,
-    create_initial_state,
-    update_state_with_observation,
+    create_initial_history,
+    update_history,
 )
-from src.simulation import InventorySimulation, SystemParameters
+from src.simulation import InventorySimulation
 
 
 class InventoryEnvironment(gym.Env):
     """
-    Gymnasium environment for inventory management with frame stacking.
+    Gymnasium environment for inventory management.
 
-    Observation Space: Continuous Box((k+1)*4,) - stacked observations
+    State Representation: State (single timestep)
+    POMDP Solution: Frame stacking via StateHistory
+
+    Observation Space: Continuous Box((k+1)*4,) - stacked states
     Action Space: Discrete(n) where n = (Q_max + 1)²
 
     Reward: Negative cost (minimize cost = maximize reward)
@@ -28,11 +32,9 @@ class InventoryEnvironment(gym.Env):
     def __init__(
         self,
         k: int = 3,
-        Q_max: int = 20,
+        Q_max: int = 80,
         episode_length: int = 100,
         gamma: float = 0.99,
-        system_params: Optional[SystemParameters] = None,
-        cost_params: Optional[CostParameters] = None,
         random_seed: Optional[int] = None,
     ):
         """
@@ -58,14 +60,13 @@ class InventoryEnvironment(gym.Env):
         # MDP components
         self.state_space_config = StateSpace(k=k)
         self.action_space_config = ActionSpace(Q_max=Q_max)
-        self.reward_function = StandardRewardFunction(cost_params or CostParameters())
+        self.reward_function = RewardFunction(CostParameters())
 
         # Simulation
-        self.system_params = system_params or SystemParameters.create_default()
-        self.simulation = InventorySimulation(self.system_params, self.np_random)
+        self.simulation = InventorySimulation(random_state=self.np_random)
 
-        # Current state (with frame stacking)
-        self.current_state: Optional[InventoryState] = None
+        # Current state history (for POMDP frame stacking)
+        self.state_history: Optional[StateHistory] = None
         self.current_step = 0
 
         # Gymnasium spaces
@@ -98,31 +99,31 @@ class InventoryEnvironment(gym.Env):
         # Set seed if provided
         if seed is not None:
             self.np_random = np.random.default_rng(seed)
-            self.simulation = InventorySimulation(self.system_params, self.np_random)
+            self.simulation = InventorySimulation(random_state=self.np_random)
 
-        # Create initial state (same observation repeated k+1 times)
+        # Create initial state history (same state repeated k+1 times)
         initial_net_inv_0 = 50
         initial_net_inv_1 = 50
-        self.current_state = create_initial_state(
+        self.state_history = create_initial_history(
             net_inventory_0=initial_net_inv_0,
             net_inventory_1=initial_net_inv_1,
             k=self.k,
         )
 
         # Reset simulation
-        self.simulation.reset(self.current_state.current_observation)
+        self.simulation.reset(self.state_history.current_state)
 
         # Reset counters
         self.current_step = 0
         self.episode_costs = []
         self.episode_rewards = []
 
-        # Return observation
-        obs = self.current_state.to_array()
+        # Return observation (flattened history)
+        obs = self.state_history.to_array()
         info = {
             "step": self.current_step,
-            "net_inventory": self.current_state.current_observation.net_inventory,
-            "outstanding": self.current_state.current_observation.outstanding_orders,
+            "net_inventory": self.state_history.current_state.net_inventory,
+            "outstanding": self.state_history.current_state.outstanding_orders,
         }
 
         return obs, info
@@ -137,21 +138,21 @@ class InventoryEnvironment(gym.Env):
         Returns:
             (observation, reward, terminated, truncated, info)
         """
-        if self.current_state is None:
+        if self.state_history is None:
             raise RuntimeError("Must call reset() before step()")
 
         # Convert action index to action object
         action_obj = self.action_space_config.get_action(action)
 
-        # Execute in simulation
-        next_obs, sim_info = self.simulation.execute_daily_decision(action_obj)
+        # Execute in simulation (returns new state)
+        next_state, sim_info = self.simulation.execute_daily_decision(action_obj)
 
         # Calculate reward
-        reward = self.reward_function(next_obs, action_obj)
+        reward = self.reward_function(next_state, action_obj)
         cost = -reward
 
-        # Update state with frame stacking
-        self.current_state = update_state_with_observation(self.current_state, next_obs)
+        # Update state history (POMDP frame stacking)
+        self.state_history = update_history(self.state_history, next_state)
 
         # Update counters
         self.current_step += 1
@@ -167,8 +168,8 @@ class InventoryEnvironment(gym.Env):
             "step": self.current_step,
             "cost": cost,
             "reward": reward,
-            "net_inventory": next_obs.net_inventory,
-            "outstanding": next_obs.outstanding_orders,
+            "net_inventory": next_state.net_inventory,
+            "outstanding": next_state.outstanding_orders,
             "num_customers": sim_info["num_customers"],
             "total_demand": sim_info["total_demand"],
         }
@@ -181,26 +182,32 @@ class InventoryEnvironment(gym.Env):
                 "avg_cost": np.mean(self.episode_costs),
             }
 
-        return self.current_state.to_array(), reward, terminated, truncated, info
+        return self.state_history.to_array(), reward, terminated, truncated, info
 
-    def get_current_state(self) -> InventoryState:
-        """Get current state object (for analysis)."""
-        if self.current_state is None:
+    def get_current_state(self) -> State:
+        """Get current state (state at time t)."""
+        if self.state_history is None:
             raise RuntimeError("Must call reset() first")
-        return self.current_state
+        return self.state_history.current_state
+
+    def get_state_history(self) -> StateHistory:
+        """Get state history (for POMDP frame stacking analysis)."""
+        if self.state_history is None:
+            raise RuntimeError("Must call reset() first")
+        return self.state_history
 
     def render(self):
         """Render current state (optional)."""
-        if self.current_state is None:
+        if self.state_history is None:
             return
 
-        obs = self.current_state.current_observation
+        state = self.state_history.current_state
         print(f"Step {self.current_step}:")
         print(
-            f"  Product 0: net_inv={obs.net_inventory[0]:4d}, outstanding={obs.outstanding_orders[0]:3d}"
+            f"  Product 0: net_inv={state.net_inventory[0]:4d}, outstanding={state.outstanding_orders[0]:3d}"
         )
         print(
-            f"  Product 1: net_inv={obs.net_inventory[1]:4d}, outstanding={obs.outstanding_orders[1]:3d}"
+            f"  Product 1: net_inv={state.net_inventory[1]:4d}, outstanding={state.outstanding_orders[1]:3d}"
         )
         if self.episode_costs:
             print(f"  Last cost: ${self.episode_costs[-1]:.2f}")
