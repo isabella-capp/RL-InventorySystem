@@ -32,7 +32,7 @@ class InventoryEnvironment(gym.Env):
     def __init__(
         self,
         k: int = 3,
-        Q_max: int = 80,
+        Q_max: int = 20,
         episode_length: int = 100,
         gamma: float = 0.99,
         random_seed: Optional[int] = None,
