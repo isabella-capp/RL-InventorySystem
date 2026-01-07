@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Optional
 
 from src.mdp.action import Action
 from src.mdp.state import State
@@ -52,14 +51,14 @@ class RewardFunction:
     2 products, but this implementation is generic.
     """
 
-    def __init__(self, params: Optional[CostParameters] = None):
+    def __init__(self):
         """
         Initialize reward function.
 
         Args:
             params: Cost parameters (uses defaults if None)
         """
-        self.params = params or CostParameters()
+        self.params = CostParameters()
 
     def calculate_costs(self, state: State, action: Action) -> CostComponents:
         """
