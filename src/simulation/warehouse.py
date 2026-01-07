@@ -95,6 +95,16 @@ class Warehouse:
         self._validate_product_id(product_id)
         self._net_inventory[product_id] = net_inventory
 
+    def set_outstanding_orders(self, product_id: int, quantity: int) -> None:
+        """
+        Set outstanding orders level (for initialization).
+        Args:
+            product_id: Product identifier
+            quantity: Outstanding orders quantity to set
+        """
+        self._validate_product_id(product_id)
+        self._outstanding_orders[product_id] = quantity
+
     def receive_shipment(self, product_id: int, quantity: int) -> None:
         """
         Receive an order shipment.
