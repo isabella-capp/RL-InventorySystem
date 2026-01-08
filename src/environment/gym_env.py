@@ -69,12 +69,12 @@ class InventoryEnvironment(gym.Env):
         # Gymnasium spaces
         # Observation space: continuous (for neural networks)
         obs_dim = (k + 1) * 4
-        self.observation_space = spaces.Box(
+        self.observation_space: spaces.Box = spaces.Box(
             low=-np.inf, high=np.inf, shape=(obs_dim,), dtype=np.float32
         )
 
         # Action space: discrete
-        self.action_space = spaces.Discrete(self.action_space_config.n)
+        self.action_space: spaces.Discrete = spaces.Discrete(self.action_space_config.n)
 
         # Episode statistics
         self.episode_costs = []
