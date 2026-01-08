@@ -202,3 +202,9 @@ class InventoryEnvironment(gym.Env):
         )
         if self.episode_costs:
             print(f"  Last cost: ${self.episode_costs[-1]:.2f}")
+
+    def __str__(self):
+        return (
+            "Inventory Management Gym Environment"
+            + f" (k={self.k}, Q_max={self.Q_max}, episode_length={self.episode_length})"
+        )
