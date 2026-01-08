@@ -23,7 +23,8 @@ class CustomerGenerator:
             rng: Random number generator
         """
         self.products = products
-        self.arrival_rate = 0.1
+        # E[inter-arrival] = 0.1 months = 3 days
+        self.arrival_rate = 1.0 / 3.0  # ≈ 0.333 customers/day
         self.rng = rng
 
     def sample_interarrival_time(self) -> float:
