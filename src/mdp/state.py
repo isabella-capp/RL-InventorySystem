@@ -159,7 +159,7 @@ def create_state(
 def sample_initial_state(
     steady_state: Tuple[int, int] = (11, 13),
     randomness: int = 5,
-    seed: Optional[int] = None,
+    rng: Optional[np.random.Generator] = None,
 ) -> State:
     """
     Sample initial state with random perturbation around steady state.
@@ -167,12 +167,13 @@ def sample_initial_state(
     Args:
         steady_state: steady state [I0, I1]
         randomness: Maximum random deviation (±randomness)
-        seed: Random seed for reproducibility
+        rng: Random number generator for reproducibility
 
     Returns:
         Perturbed initial state
     """
-    rng = np.random.default_rng(seed)
+    if rng is None:
+        rng = np.random.default_rng()
 
     I0, I1 = steady_state
 
@@ -193,7 +194,7 @@ def create_initial_history(
     net_inventory_0: int = 0,
     k: int = 32,
     sample: bool = True,
-    seed: Optional[int] = None,
+    rng: Optional[np.random.Generator] = None,
 ) -> StateHistory:
     """
     Create an initial state history with the same state repeated.
@@ -205,13 +206,13 @@ def create_initial_history(
         net_inventory_1: Initial net inventory for product 1
         k: Number of historical frames
         sample: Whether to sample initial state with randomness
-        seed: Random seed for reproducibility
+        rng: Random number generator for reproducibility
 
     Returns:
         StateHistory with repeated initial state
     """
     if sample:
-        initial_state = sample_initial_state(seed=seed)
+        initial_state = sample_initial_state(rng=rng)
     else:
         initial_state = create_state(net_inventory_0, net_inventory_1, 0, 0)
 

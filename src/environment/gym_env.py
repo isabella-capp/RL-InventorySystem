@@ -91,13 +91,14 @@ class InventoryEnvironment(gym.Env):
         Returns:
             (observation_array, info_dict)
         """
-        # Set seed if provided
+        # Reseed RNG if provided (without recreating simulation)
         if seed is not None:
             self.np_random = np.random.default_rng(seed)
-            self.simulation = InventorySimulation(random_state=self.np_random)
+            # Update simulation's RNG reference
+            self.simulation.rng = self.np_random
 
-        # Create initial state history (with sampling)
-        self.state_history = create_initial_history(k=self.k)
+        # Create initial state history (with sampling using environment's RNG)
+        self.state_history = create_initial_history(k=self.k, sample=True, rng=self.np_random)
 
         # Reset simulation
         self.simulation.reset(self.state_history.current_state)

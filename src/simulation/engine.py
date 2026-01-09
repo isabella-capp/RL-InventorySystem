@@ -4,7 +4,7 @@ import numpy as np
 import simpy
 
 from src.mdp.action import Action
-from src.mdp.state import State, create_state
+from src.mdp.state import State, sample_initial_state, create_state
 from src.simulation.customer import CustomerGenerator
 from src.simulation.logger import SimulationLogger
 from src.simulation.product import Product, create_default_products
@@ -62,13 +62,13 @@ class InventorySimulation:
         Reset simulation to initial state.
 
         Args:
-            initial_state: Initial state (defaults to zero inventory and orders)
+            initial_state: Initial state (defaults to sampled state using simulation's RNG)
         """
         # Create new SimPy environment
         self.env = simpy.Environment()
 
         if initial_state is None:
-            initial_state = create_state()
+            initial_state = sample_initial_state(rng=self.rng)
 
         # Reset warehouse state
         for i in range(self.num_products):
