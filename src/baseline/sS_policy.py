@@ -1,6 +1,5 @@
-import math
-from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Tuple
 
 from src.mdp import Action, State
 
@@ -10,27 +9,22 @@ class sSPolicy:
     """
     (s,S) policy for N-product inventory system.
 
-    Rule: If inventory_position ≤ s_min, order (s_max - IP) units (clipped to Q_max)
+    Rule: If inventory_position ≤ s, order (S - IP) units
 
     Parameters:
-        params: Tuple of (s_min, s_max) for each product
+        params: Tuple of (s, S) for each product
                 e.g., ((9, 21), (8, 20)) for 2 products
-        Q_max: Maximum order quantity per product (action space constraint)
+                s = reorder point (when to order)
+                S = order-up-to level (target inventory position)
     """
 
-    params: Tuple[Tuple[int, int], ...]  # ((s_min_0, s_max_0), (s_min_1, s_max_1), ...)
-    Q_max: int = 20
+    params: Tuple[Tuple[int, int], ...]  # ((s_0, S_0), (s_1, S_1), ...)
 
     def __post_init__(self):
         """Validate parameters."""
-        for i, (s_min, s_max) in enumerate(self.params):
-            if s_max <= s_min:
-                raise ValueError(
-                    f"Product {i}: s_max ({s_max}) must be > s_min ({s_min})"
-                )
-
-        if self.Q_max <= 0:
-            raise ValueError("Q_max must be positive")
+        for i, (s, S) in enumerate(self.params):
+            if S <= s:
+                raise ValueError(f"Product {i}: S ({S}) must be > s ({s})")
 
     @property
     def num_products(self) -> int:
@@ -73,75 +67,40 @@ class sSPolicy:
     def _get_order(self, inventory_position: int, s_min: int, s_max: int) -> int:
         """Get order quantity for a single product."""
         if inventory_position <= s_min:
-            return min(max(0, s_max - inventory_position), self.Q_max)
+            return max(0, s_max - inventory_position)
         return 0
 
     def as_dict(self) -> dict:
         """Return policy parameters as dictionary."""
-        return {f"product_{i}": self.params[i] for i in range(self.num_products)} | {
-            "Q_max": self.Q_max
+        return {
+            f"product_{i}": {"s": self.params[i][0], "S": self.params[i][1]}
+            for i in range(self.num_products)
         }
 
     def __str__(self) -> str:
-        products = ", ".join(f"P{i}={self.params[i]}" for i in range(self.num_products))
-        return f"(s,S) Policy: {products}, Q_max={self.Q_max}"
+        products = ", ".join(
+            f"P{i}=(s_min={self.params[i][0]}, s_max={self.params[i][1]})"
+            for i in range(self.num_products)
+        )
+        return f"(s,S) Policy: {products}"
 
     def __repr__(self) -> str:
-        return f"sSPolicy(params={self.params}, Q_max={self.Q_max})"
+        return f"sSPolicy(params={self.params})"
 
 
 def create_sS_policy(
     *product_params: Tuple[int, int],
-    Q_max: int = 20,
 ) -> sSPolicy:
     """
     Factory function to create (s,S) policy.
 
     Args:
-        *product_params: (s_min, s_max) tuples for each product
-        Q_max: Maximum order quantity
+        *product_params: (s, S) tuples for each product
 
     Returns:
         Configured sSPolicy instance
 
     Example:
-        policy = create_sS_policy((9, 21), (8, 20), Q_max=20)
+        policy = create_sS_policy((9, 21), (8, 20))
     """
-    return sSPolicy(params=product_params, Q_max=Q_max)
-
-
-def calculate_policy_params(
-    ddlt: Tuple[float, ...],
-    safety_factor: float = 0.5,
-    eoq: Optional[Tuple[float, ...]] = None,
-    Q_max: int = 20,
-) -> Tuple[Tuple[int, int], ...]:
-    """
-    Calculate (s,S) parameters from demand and lead time data.
-
-    Args:
-        ddlt: Demand during lead time for each product
-        safety_factor: Safety stock as fraction of DDLT (default 0.5)
-        eoq: Economic order quantities (optional, uses Q_max if None)
-        Q_max: Maximum order quantity constraint
-
-    Returns:
-        Tuple of (s_min, s_max) for each product
-    """
-    result = []
-
-    for i, ddlt_i in enumerate(ddlt):
-        # Calculate reorder point: s_min = DDLT + safety_stock
-        safety_stock = ddlt_i * safety_factor
-        s_min = int(math.ceil(ddlt_i + safety_stock))
-
-        # Calculate order-up-to level: s_max = s_min + order_size
-        if eoq is not None and i < len(eoq):
-            order_size = min(int(eoq[i]), Q_max)
-        else:
-            order_size = Q_max
-
-        s_max = s_min + order_size
-        result.append((s_min, s_max))
-
-    return tuple(result)
+    return sSPolicy(params=product_params)
