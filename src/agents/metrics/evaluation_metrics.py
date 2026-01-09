@@ -1,11 +1,13 @@
 """Evaluation plots for RL agents."""
 
-import numpy as np
+from dataclasses import dataclass
+from typing import Dict, List, Optional
+
 import matplotlib.pyplot as plt
+import numpy as np
 from matplotlib.figure import Figure
 from matplotlib.patches import Patch
-from typing import List, Dict, Optional
-from dataclasses import dataclass
+
 from src.mdp import CostParameters
 
 
@@ -54,13 +56,16 @@ class EvaluationMetrics:
         Y_bar = np.mean(daily_costs_matrix, axis=1)
 
         # Apply moving average
-        Y_smoothed = np.convolve(Y_bar, np.ones(window_size) / window_size, mode="valid")
+        Y_smoothed = np.convolve(
+            Y_bar, np.ones(window_size) / window_size, mode="valid"
+        )
         smoothed_days = np.arange(len(Y_smoothed)) + (window_size - 1) // 2
 
         # Steady-state mean (last 20% of smoothed data)
-        ss_window_len = int(len(Y_smoothed) * 0.2) 
-        if ss_window_len < 10: ss_window_len = 10 # Minimo 10 giorni
-        
+        ss_window_len = int(len(Y_smoothed) * 0.2)
+        if ss_window_len < 10:
+            ss_window_len = 10  # Minimo 10 giorni
+
         ss_data = Y_smoothed[-ss_window_len:]
         ss_mean = np.mean(ss_data)
         ss_std = np.std(ss_data)
@@ -70,16 +75,26 @@ class EvaluationMetrics:
 
         # Left: Raw average
         ax = axes[0]
-        ax.plot(range(n_days), Y_bar, "b-", linewidth=1, alpha=0.7, label="Mean Daily Cost")
+        ax.plot(
+            range(n_days), Y_bar, "b-", linewidth=1, alpha=0.7, label="Mean Daily Cost"
+        )
         ax.set_xlabel("Day (Time Step)", fontsize=11)
         ax.set_ylabel("Average Daily Cost ($)", fontsize=11)
-        ax.set_title("Average Daily Cost Across Replications", fontsize=12, fontweight="bold")
+        ax.set_title(
+            "Average Daily Cost Across Replications", fontsize=12, fontweight="bold"
+        )
         ax.grid(True, alpha=0.3)
         ax.legend()
 
         # Right: Smoothed
         ax = axes[1]
-        ax.plot(smoothed_days, Y_smoothed, "b-", linewidth=2, label=f"Moving Average (w={window_size})")
+        ax.plot(
+            smoothed_days,
+            Y_smoothed,
+            "b-",
+            linewidth=2,
+            label=f"Moving Average (w={window_size})",
+        )
         ax.axhline(
             y=ss_mean,
             color="r",
@@ -89,7 +104,9 @@ class EvaluationMetrics:
         )
         ax.set_xlabel("Day (Time Step)", fontsize=11)
         ax.set_ylabel("Smoothed Daily Cost ($)", fontsize=11)
-        ax.set_title("Welch's Procedure: Identify Warm-up Period", fontsize=12, fontweight="bold")
+        ax.set_title(
+            "Welch's Procedure: Identify Warm-up Period", fontsize=12, fontweight="bold"
+        )
         ax.grid(True, alpha=0.3)
         ax.legend()
 
@@ -107,14 +124,15 @@ class EvaluationMetrics:
         print(f"   Episode length:     {n_days} days")
         print(f"   Moving average window:    {window_size}\n")
 
-        
         print("=" * 60)
         print(f"📈 Results & Convergence:")
         print("=" * 60)
         print(f"   Steady-State Mean: ${ss_mean:.2f}")
         print(f"   Stability (Std Dev):    {ss_std:.2f} (Lower is better/flatter)")
-   
-        print(f"\n⚠️  Visually inspect the right plot to identify where the curve flattens.")
+
+        print(
+            f"\n⚠️  Visually inspect the right plot to identify where the curve flattens."
+        )
 
         return n_days, n_reps
 
@@ -139,7 +157,9 @@ class EvaluationMetrics:
         Returns:
             matplotlib Figure object.
         """
-        costs_p1, costs_p2 = self._compute_costs_by_product(test_episodes, warmup_length)
+        costs_p1, costs_p2 = self._compute_costs_by_product(
+            test_episodes, warmup_length
+        )
 
         # Calculate means
         p1_ord = np.mean(costs_p1["ordering"])
@@ -222,9 +242,11 @@ class EvaluationMetrics:
         total_p1 = p1_ord + p1_hold + p1_short
         total_p2 = p2_ord + p2_hold + p2_short
         total_all = total_p1 + total_p2
-        
+
         print("=" * 60)
-        print(f"📊 Steady-State Average Cost per Episode (days {warmup_length+1}-{n_days}):")
+        print(
+            f"📊 Steady-State Average Cost per Episode (days {warmup_length+1}-{n_days}):"
+        )
         print("=" * 60)
         print(f"\n  Product 1: ${total_p1:.2f}")
         print(f"    Ordering: ${p1_ord:.2f} ({p1_ord/total_p1*100:.1f}%)")
@@ -237,9 +259,7 @@ class EvaluationMetrics:
         print("-" * 60)
         print(f"\n  TOTAL: ${total_all:.2f}")
 
-    def _compute_costs_by_product(
-        self, episodes: List[Dict], warmup: int
-    ) -> tuple:
+    def _compute_costs_by_product(self, episodes: List[Dict], warmup: int) -> tuple:
         """Compute cost components separately for each product."""
         costs_p1 = {"ordering": [], "holding": [], "shortage": []}
         costs_p2 = {"ordering": [], "holding": [], "shortage": []}
@@ -296,7 +316,9 @@ class EvaluationMetrics:
         # Product 1 - Net Inventory
         ax = axes[0, 0]
         ax.plot(days, episode_data["net_inv_0"], "b-", linewidth=1.5)
-        ax.axhline(y=0, color="k", linestyle="-", linewidth=2, label="Stockout threshold")
+        ax.axhline(
+            y=0, color="k", linestyle="-", linewidth=2, label="Stockout threshold"
+        )
         ax.fill_between(
             days,
             episode_data["net_inv_0"],
@@ -323,7 +345,9 @@ class EvaluationMetrics:
         # Product 2 - Net Inventory
         ax = axes[0, 1]
         ax.plot(days, episode_data["net_inv_1"], "g-", linewidth=1.5)
-        ax.axhline(y=0, color="k", linestyle="-", linewidth=2, label="Stockout threshold")
+        ax.axhline(
+            y=0, color="k", linestyle="-", linewidth=2, label="Stockout threshold"
+        )
         ax.fill_between(
             days,
             episode_data["net_inv_1"],
@@ -352,8 +376,13 @@ class EvaluationMetrics:
             # Product 1 - Demand
             ax = axes[2, 0]
             ax.bar(days, episode_data["demand_0"], color="coral", alpha=0.8, width=1.0)
-            ax.axhline(y=np.mean(episode_data["demand_0"]), color="darkred", linestyle="--", 
-                      linewidth=1.5, label=f"Mean: {np.mean(episode_data['demand_0']):.1f}")
+            ax.axhline(
+                y=np.mean(episode_data["demand_0"]),
+                color="darkred",
+                linestyle="--",
+                linewidth=1.5,
+                label=f"Mean: {np.mean(episode_data['demand_0']):.1f}",
+            )
             ax.set_xlabel("Day", fontsize=11)
             ax.set_ylabel("Daily Demand (P1)", fontsize=11)
             ax.set_title("Product 1: Customer Demand", fontsize=12, fontweight="bold")
@@ -362,9 +391,16 @@ class EvaluationMetrics:
 
             # Product 2 - Demand
             ax = axes[2, 1]
-            ax.bar(days, episode_data["demand_1"], color="darkorange", alpha=0.8, width=1.0)
-            ax.axhline(y=np.mean(episode_data["demand_1"]), color="darkred", linestyle="--", 
-                      linewidth=1.5, label=f"Mean: {np.mean(episode_data['demand_1']):.1f}")
+            ax.bar(
+                days, episode_data["demand_1"], color="darkorange", alpha=0.8, width=1.0
+            )
+            ax.axhline(
+                y=np.mean(episode_data["demand_1"]),
+                color="darkred",
+                linestyle="--",
+                linewidth=1.5,
+                label=f"Mean: {np.mean(episode_data['demand_1']):.1f}",
+            )
             ax.set_xlabel("Day", fontsize=11)
             ax.set_ylabel("Daily Demand (P2)", fontsize=11)
             ax.set_title("Product 2: Customer Demand", fontsize=12, fontweight="bold")
@@ -378,7 +414,6 @@ class EvaluationMetrics:
 
         if show:
             plt.show()
-
 
     def plot_inventory_histogram(
         self,
@@ -409,14 +444,18 @@ class EvaluationMetrics:
         # Product 1 Histogram
         ax = axes[0]
         bins = np.linspace(min(all_inv_p1) - 5, max(all_inv_p1) + 5, 40)
-        n, bin_edges, patches = ax.hist(all_inv_p1, bins=bins, edgecolor="black", alpha=0.7)
+        n, bin_edges, patches = ax.hist(
+            all_inv_p1, bins=bins, edgecolor="black", alpha=0.7
+        )
         for i, patch in enumerate(patches):
             bin_center = (bin_edges[i] + bin_edges[i + 1]) / 2
             patch.set_facecolor("red" if bin_center < 0 else "green")
         ax.axvline(x=0, color="k", linestyle="-", linewidth=2)
         ax.set_xlabel("Net Inventory Level", fontsize=11)
         ax.set_ylabel("Frequency", fontsize=11)
-        ax.set_title("Product 1: Inventory Distribution", fontsize=12, fontweight="bold")
+        ax.set_title(
+            "Product 1: Inventory Distribution", fontsize=12, fontweight="bold"
+        )
         ax.grid(True, alpha=0.3, axis="y")
         legend_elements = [
             Patch(facecolor="red", label="Backlog (I < 0)"),
@@ -427,14 +466,18 @@ class EvaluationMetrics:
         # Product 2 Histogram
         ax = axes[1]
         bins = np.linspace(min(all_inv_p2) - 5, max(all_inv_p2) + 5, 40)
-        n, bin_edges, patches = ax.hist(all_inv_p2, bins=bins, edgecolor="black", alpha=0.7)
+        n, bin_edges, patches = ax.hist(
+            all_inv_p2, bins=bins, edgecolor="black", alpha=0.7
+        )
         for i, patch in enumerate(patches):
             bin_center = (bin_edges[i] + bin_edges[i + 1]) / 2
             patch.set_facecolor("red" if bin_center < 0 else "green")
         ax.axvline(x=0, color="k", linestyle="-", linewidth=2)
         ax.set_xlabel("Net Inventory Level", fontsize=11)
         ax.set_ylabel("Frequency", fontsize=11)
-        ax.set_title("Product 2: Inventory Distribution", fontsize=12, fontweight="bold")
+        ax.set_title(
+            "Product 2: Inventory Distribution", fontsize=12, fontweight="bold"
+        )
         ax.grid(True, alpha=0.3, axis="y")
         ax.legend(handles=legend_elements, loc="upper right", fontsize=10)
 
@@ -447,7 +490,7 @@ class EvaluationMetrics:
         # Print service level stats
         stockout_p1 = sum(1 for x in all_inv_p1 if x < 0) / len(all_inv_p1)
         stockout_p2 = sum(1 for x in all_inv_p2 if x < 0) / len(all_inv_p2)
-        
+
         print("=" * 60)
         print(f"⚙️Service Level (% days without stockout):")
         print("=" * 60)

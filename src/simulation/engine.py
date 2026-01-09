@@ -4,7 +4,7 @@ import numpy as np
 import simpy
 
 from src.mdp.action import Action
-from src.mdp.state import State, sample_initial_state, create_state
+from src.mdp.state import State, create_state, sample_initial_state
 from src.simulation.customer import CustomerGenerator
 from src.simulation.logger import SimulationLogger
 from src.simulation.product import Product, create_default_products

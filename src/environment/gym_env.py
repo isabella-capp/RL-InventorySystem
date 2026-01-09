@@ -6,12 +6,7 @@ from gymnasium import spaces
 
 from src.mdp.action import ActionSpace
 from src.mdp.reward import RewardFunction
-from src.mdp.state import (
-    State,
-    StateHistory,
-    create_initial_history,
-    update_history,
-)
+from src.mdp.state import State, StateHistory, create_initial_history, update_history
 from src.simulation import InventorySimulation
 
 
@@ -98,7 +93,9 @@ class InventoryEnvironment(gym.Env):
             self.simulation.rng = self.np_random
 
         # Create initial state history (with sampling using environment's RNG)
-        self.state_history = create_initial_history(k=self.k, sample=True, rng=self.np_random)
+        self.state_history = create_initial_history(
+            k=self.k, sample=True, rng=self.np_random
+        )
 
         # Reset simulation
         self.simulation.reset(self.state_history.current_state)

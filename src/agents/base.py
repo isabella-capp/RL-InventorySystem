@@ -1,11 +1,12 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
-from stable_baselines3.common.callbacks import BaseCallback
 
 import numpy as np
+from stable_baselines3.common.callbacks import BaseCallback
 
 MaybeCallback = Union[None, list[BaseCallback], BaseCallback]
+
 
 class Agent(ABC):
     """
@@ -28,7 +29,7 @@ class Agent(ABC):
             action_space: Gymnasium action space
             seed: Random seed for reproducibility
         """
-        
+
         self.observation_space = observation_space
         self.action_space = action_space
         self.seed = seed
@@ -68,9 +69,11 @@ class Agent(ABC):
             Action index to execute
         """
         pass
-    
+
     @abstractmethod
-    def train(self, total_timesteps: int, callbacks: MaybeCallback = None,**kwargs) -> Any:
+    def train(
+        self, total_timesteps: int, callbacks: MaybeCallback = None, **kwargs
+    ) -> Any:
         """
         Train the agent.
 
@@ -79,7 +82,6 @@ class Agent(ABC):
             **kwargs: Additional arguments for the training loop
         """
         pass
-
 
     @abstractmethod
     def save(self, path: Path):
@@ -100,7 +102,7 @@ class Agent(ABC):
             path: Path to saved model directory or file
         """
         pass
-    
+
     def get_stats(self) -> Dict[str, Any]:
         """
         Get current training statistics.
@@ -115,6 +117,4 @@ class Agent(ABC):
 
     def __repr__(self) -> str:
         """String representation of agent."""
-        return (
-            f"{self.__class__.__name__}(seed={self.seed})"
-        )
+        return f"{self.__class__.__name__}(seed={self.seed})"

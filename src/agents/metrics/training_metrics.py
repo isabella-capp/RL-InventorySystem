@@ -1,8 +1,9 @@
 """Training plots for RL agents."""
 
-import numpy as np
-import matplotlib.pyplot as plt
 from typing import List, Optional
+
+import matplotlib.pyplot as plt
+import numpy as np
 
 
 class TrainingMetrics:
@@ -76,8 +77,10 @@ class TrainingMetrics:
         # Statistics Calculation
         if len(rewards) > 0:
             ep_lengths = timesteps[-1] / len(rewards)
-    
-            last_window_rewards = rewards[-window:] if len(rewards) >= window else rewards
+
+            last_window_rewards = (
+                rewards[-window:] if len(rewards) >= window else rewards
+            )
             reward_per_day = rewards / ep_lengths
 
             print("=" * 60)
@@ -86,21 +89,26 @@ class TrainingMetrics:
             print(f"  Total Episodes: {len(rewards)}")
             print(f"  Total Timesteps: {timesteps[-1]}")
             print(f"  Episode Length: {ep_lengths:.2f} timesteps")
-            
+
             print(f"\n  -- Performance (Last {len(last_window_rewards)} episodes) --")
-            print(f"  Mean Reward:   {np.mean(last_window_rewards):.2f} ± {np.std(last_window_rewards):.2f}")
+            print(
+                f"  Mean Reward:   {np.mean(last_window_rewards):.2f} ± {np.std(last_window_rewards):.2f}"
+            )
             print(f"  Min Reward:    {np.min(last_window_rewards):.2f}")
             print(f"  Max Reward:    {np.max(last_window_rewards):.2f}")
-            
+
             print(f"\n  -- Specifics --")
             print(f"  Best Ever Reward: {np.max(rewards):.2f}")
             print(f"  Last Ep Reward:   {rewards[-1]:.2f}")
-            
-            print(f"\n -- Daily Rewards --")
-            print(f"  Mean Reward per Day: {np.mean(reward_per_day):.2f} ± {np.std(reward_per_day):.2f}")
-            print(f"  Final Mean Reward per Day (last {window} eps): {np.mean(reward_per_day[-window:]):.2f} ± {np.std(reward_per_day[-window:]):.2f}")
 
-        
+            print(f"\n -- Daily Rewards --")
+            print(
+                f"  Mean Reward per Day: {np.mean(reward_per_day):.2f} ± {np.std(reward_per_day):.2f}"
+            )
+            print(
+                f"  Final Mean Reward per Day (last {window} eps): {np.mean(reward_per_day[-window:]):.2f} ± {np.std(reward_per_day[-window:]):.2f}"
+            )
+
     def plot_epsilon_decay(
         self,
         total_timesteps: int,
