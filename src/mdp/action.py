@@ -43,12 +43,12 @@ class ActionSpace:
     Total action space size: (Q_max + 1)²
     """
 
-    def __init__(self, Q_max: int = 20):
+    def __init__(self, Q_max: int = 42):
         """
         Initialize action space.
 
         Args:
-            Q_max: Maximum order quantity per product (default: 20)
+            Q_max: Maximum order quantity per product (default: 42)
         """
         if Q_max <= 0:
             raise ValueError(f"Q_max must be positive, got {Q_max}")
