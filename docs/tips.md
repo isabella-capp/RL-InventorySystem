@@ -26,10 +26,6 @@
 3.  **Debugging and Training Practices**
     
     Before running long trainings, perform these unit tests:
-    - The $\gamma = 0$ Test (Crucial):
-        - Set discount factor $\gamma = 0$.
-        - **Expected Result**: The optimal policy should converge to "Never Order" ($a_t = 0$).
-        - **Logic**: With $\gamma=0$, the agent ignores future stockouts and only sees the immediate penalty of ordering ($K + i \cdot q$). If it still orders, your reward calculation or code logic is buggy.
     - **The Overfit Test:**
         Train on a tiny, deterministic environment (e.g., constant demand, 0 lead time). The agent should quickly achieve perfect behavior.
     - **Log everything**: use **`TensorBoard`**, **`Weights`** & **`Biases`**.
