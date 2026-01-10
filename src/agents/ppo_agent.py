@@ -10,7 +10,6 @@ from stable_baselines3.common.callbacks import BaseCallback
 
 from src.agents.base import Agent
 from src.environment import InventoryEnvironment
-from src.agents.normalization_wrapper import InventoryNormalizationWrapper
 
 MaybeCallback = Union[None, list[BaseCallback], BaseCallback]
 
@@ -29,7 +28,7 @@ class PPOAgent(Agent):
 
     def __init__(
         self,
-        env: InventoryEnvironment | InventoryNormalizationWrapper,
+        env: InventoryEnvironment,
         learning_rate: float = 3e-4,
         gamma: float = 0.99,
         n_steps: int = 2048,
