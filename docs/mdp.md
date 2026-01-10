@@ -42,16 +42,7 @@ The **state** at time $t$ is defined as a sequence of the most recent $k+1$ obse
 
 **$s_t = \bigl[o_t, o_{t-1}, \dots, o_{t-k}\bigr]$**
 
-> with $k = 3$ in our implementation.
-
 Thus, the state is a $(k+1) \times 4$-dimensional vector, flattened when used as input to the neural network.
-
-### State Space Bounds
-
-$$S = \{s \mid I_{min} \leq I_{t,j} \leq I_{max}, \quad 0 \leq O_{t,j} \leq O_{max}\}$$
-Where:
-- $I_{t,j} \in [-100, 200]$: Net Inventory range.
-- $O_{t,j} \in [0, 150]$: Outstanding Orders range. 
 
 ### Inventory Position
 
@@ -90,7 +81,7 @@ The action space is discrete and bounded. We define a maximum order quantity $Q_
 
 **$$A = \{ a \in \mathbb{Z}^2 \mid 0 \le q_{t,j} \le Q_{max} \quad \forall j \in \{0, 1\} \}$$**
 
-In our implementation, we set $Q_{max} = 20$.
+
 - $q_{t,j} = 0$: No order is placed for product $j$ (Corresponds to "Review but do not order") at time $t$.
 - $q_{t,j} > 0$: An order of $q_{t,j}$ units is placed immediately.
 
@@ -130,8 +121,8 @@ The environment is stochastic and is driven by two primary sources of randomness
 
     The time delay between placing an order and receiving it is modeled as a continuous random variable:
 
-    1. **Product 1**: $L \sim U(0.5, 1.0)$ days
-    2. **Product 2**: $L \sim U(0.2, 0.7)$ days.
+    1. **Product 1**: $L \sim U(0.5, 1.0)$ month
+    2. **Product 2**: $L \sim U(0.2, 0.7)$ month.
 
     >**Note:** The lead time is handled internally by the simulator and is not directly observable by the agent.
 
@@ -280,7 +271,7 @@ Find policy $\pi^*$ that maximizes expected cumulative reward:
 ### 1. State Space
 
   - **Nature: Partially Observable (POMDP)**. The raw observation $o_t$ does not fully capture the system state due to hidden lead times.
-  - **Resolution Strategy: Frame Stacking.** By defining the state $S_t$ as a sequence of the last 4 observations (current + 3 history), we construct a "belief state" that allows the agent to infer hidden temporal dynamics.
+  - **Resolution Strategy: Frame Stacking.** By defining the state $S_t$ as a sequence of the last 4 observations (current + k history), we construct a "belief state" that allows the agent to infer hidden temporal dynamics.
   - **Dimensionality:**
     - **Raw Observation ($o_t$):** 4 features ($2 \times$ Inventory_level, $2 \times$ On-Order).
     - **Effective State Input ($S_t$):** 16 features. Calculated as: $(k+1) \times |o_t| = 4 \times 4 = 16$
