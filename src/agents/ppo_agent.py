@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
-from sympy import Q
 
 from src.agents.base import Agent
 from src.environment import InventoryEnvironment

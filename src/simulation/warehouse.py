@@ -191,10 +191,3 @@ class Warehouse:
             raise ValueError(
                 f"Product ID {product_id} out of range [0, {self.num_products})"
             )
-
-    def __repr__(self) -> str:
-        state_str = ", ".join(
-            f"P{i}(I={self._net_inventory[i]:+3d}, O={self._outstanding_orders[i]:2d})"
-            for i in range(self.num_products)
-        )
-        return f"Warehouse({state_str})"

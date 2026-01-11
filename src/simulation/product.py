@@ -70,7 +70,7 @@ def create_product_0() -> Product:
     Create Product 0 with assignment specifications.
 
     Demand: {1:1/6, 2:1/3, 3:1/3, 4:1/6}
-    Lead Time: Uniform(0.5, 1.0) days
+    Lead Time: Uniform(0.5, 1.0) months
     """
     return Product(
         product_id=0,
@@ -86,7 +86,7 @@ def create_product_1() -> Product:
     Create Product 1 with assignment specifications.
 
     Demand: {5:1/8, 4:1/2, 3:1/4, 2:1/8}
-    Lead Time: Uniform(0.2, 0.7) days
+    Lead Time: Uniform(0.2, 0.7) months
     """
     return Product(
         product_id=1,

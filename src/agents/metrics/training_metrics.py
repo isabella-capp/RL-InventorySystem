@@ -1,6 +1,6 @@
 """Training plots for RL agents."""
 
-from typing import List, Optional
+from typing import List
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -84,7 +84,7 @@ class TrainingMetrics:
             reward_per_day = rewards / ep_lengths
 
             print("=" * 60)
-            print(f"📊 Training Statistics:")
+            print("📊 Training Statistics:")
             print("=" * 60)
             print(f"  Total Episodes: {len(rewards)}")
             print(f"  Total Timesteps: {timesteps[-1]}")
@@ -97,11 +97,11 @@ class TrainingMetrics:
             print(f"  Min Reward:    {np.min(last_window_rewards):.2f}")
             print(f"  Max Reward:    {np.max(last_window_rewards):.2f}")
 
-            print(f"\n  -- Specifics --")
+            print("\n  -- Specifics --")
             print(f"  Best Ever Reward: {np.max(rewards):.2f}")
             print(f"  Last Ep Reward:   {rewards[-1]:.2f}")
 
-            print(f"\n -- Daily Rewards --")
+            print("\n -- Daily Rewards --")
             print(
                 f"  Mean Reward per Day: {np.mean(reward_per_day):.2f} ± {np.std(reward_per_day):.2f}"
             )

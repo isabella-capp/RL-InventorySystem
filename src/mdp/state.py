@@ -100,7 +100,7 @@ class StateHistory:
     def current_state(self) -> State:
         """Get the most recent state (s_t)."""
         return self.states[0]
-    
+
     @property
     def shape(self) -> Tuple[int]:
         """Get shape of history array."""
@@ -192,7 +192,7 @@ def sample_initial_state(
 def create_initial_history(
     net_inventory_1: int = 0,
     net_inventory_0: int = 0,
-    k: int = 32,
+    k: int = 30,
     sample: bool = True,
     rng: Optional[np.random.Generator] = None,
 ) -> StateHistory:

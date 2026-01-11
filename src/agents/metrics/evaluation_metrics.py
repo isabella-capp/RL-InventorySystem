@@ -132,14 +132,14 @@ class EvaluationMetrics:
 
         # Print summary
         print("=" * 60)
-        print(f"📊 Welch's Procedure Summary:")
+        print("📊 Welch's Procedure Summary:")
         print("=" * 60)
         print(f"   Total replications: {n_reps}")
         print(f"\n✅ Suggested Warmup Length: {warmup_detected} days")
-        print(f"   (Detected where curve stays within 5% of steady-state)")
+        print("   (Detected where curve stays within 5% of steady-state)")
 
-        print(f"\n💡 Tip: Visually verify the green line on the right plot.")
-        print(f"   Adjust manually if needed based on your domain knowledge.")
+        print("\n💡 Tip: Visually verify the green line on the right plot.")
+        print("   Adjust manually if needed based on your domain knowledge.")
 
         return n_days, n_reps, warmup_detected
 
@@ -561,7 +561,7 @@ class EvaluationMetrics:
         stockout_p2 = sum(1 for x in all_inv_p2 if x < 0) / len(all_inv_p2)
 
         print("=" * 60)
-        print(f"⚙️Service Level (% days without stockout):")
+        print("⚙️Service Level (% days without stockout):")
         print("=" * 60)
         print(f"  Product 1: {(1-stockout_p1)*100:.1f}%")
         print(f"  Product 2: {(1-stockout_p2)*100:.1f}%")
@@ -666,7 +666,7 @@ class EvaluationMetrics:
 
         # Print summary statistics
         print("=" * 60)
-        print(f"📊 Daily Cost Statistics (Steady-State):")
+        print("📊 Daily Cost Statistics (Steady-State):")
         print("=" * 60)
         print(f"  Mean:   ${np.mean(mean_daily):.2f} ± ${np.mean(std_daily):.2f}")
         print(f"  Median: ${np.median(mean_daily):.2f}")
@@ -717,9 +717,15 @@ class EvaluationMetrics:
 
         # Print brief summary
         print("=" * 60)
-        print(f"📊 COST SUMMARY ({len(test_episodes)} episodes, {n_ss_days} steady-state days)")
+        print(
+            f"📊 COST SUMMARY ({len(test_episodes)} episodes, {n_ss_days} steady-state days)"
+        )
         print("=" * 60)
-        print(f"  Daily Cost: ${stats['daily_mean']:.2f} ± ${stats['daily_ci']:.2f} (95% CI)")
-        print(f"  Episode Total: ${stats['episode_mean']:.2f} ± ${stats['episode_ci']:.2f}")
+        print(
+            f"  Daily Cost: ${stats['daily_mean']:.2f} ± ${stats['daily_ci']:.2f} (95% CI)"
+        )
+        print(
+            f"  Episode Total: ${stats['episode_mean']:.2f} ± ${stats['episode_ci']:.2f}"
+        )
 
         return stats

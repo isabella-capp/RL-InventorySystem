@@ -73,7 +73,7 @@ class AgentsLoader:
 
         # Cache and return
         self._loaded_agents[cache_key] = (agent, metadata)
-        print(f"✅ Agent loaded successfully")
+        print("✅ Agent loaded successfully")
         return agent, metadata
 
     def _load_generic(

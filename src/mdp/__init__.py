@@ -1,4 +1,4 @@
-from src.mdp.action import Action, ActionSpace, no_order_action, order_both_products
+from src.mdp.action import Action, ActionSpace, order_both_products
 from src.mdp.reward import CostComponents, CostParameters, RewardFunction
 from src.mdp.state import (
     State,
@@ -21,7 +21,6 @@ __all__ = [
     "Action",
     "ActionSpace",
     "order_both_products",
-    "no_order_action",
     # Reward
     "CostParameters",
     "CostComponents",

@@ -1,7 +1,6 @@
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
-import numpy as np
 
 
 @dataclass(frozen=True)
@@ -26,14 +25,6 @@ class Action:
         """Number of products in this action."""
         return len(self.order_quantities)
 
-    def get_order_quantity(self, product_id: int) -> int:
-        """Get order quantity for a specific product."""
-        if not 0 <= product_id < self.num_products:
-            raise ValueError(
-                f"Product ID {product_id} out of range [0, {self.num_products})"
-            )
-        return self.order_quantities[product_id]
-
 
 class ActionSpace:
     """
@@ -43,7 +34,7 @@ class ActionSpace:
     Total action space size: (Q_max + 1)²
     """
 
-    def __init__(self, Q_max: int = 42):
+    def __init__(self, Q_max: int = 30):
         """
         Initialize action space.
 
@@ -58,43 +49,19 @@ class ActionSpace:
 
         # Generate all possible actions
         self.actions: List[Action] = []
-        self.action_to_index: dict = {}
 
-        idx = 0
         for q0 in self.possible_quantities:
             for q1 in self.possible_quantities:
                 action = Action(order_quantities=(q0, q1))
                 self.actions.append(action)
-                self.action_to_index[action] = idx
-                idx += 1
 
         self.n = len(self.actions)
-
-    def sample(self, random_state: Optional[np.random.Generator] = None) -> Action:
-        """Sample a random action."""
-        if random_state is None:
-            random_state = np.random.default_rng()
-        idx = random_state.integers(0, self.n)
-        return self.actions[idx]
 
     def get_action(self, index: int) -> Action:
         """Get action by index."""
         if not 0 <= index < self.n:
             raise ValueError(f"Index {index} out of range [0, {self.n})")
         return self.actions[index]
-
-    def get_index(self, action: Action) -> int:
-        """Get index of an action."""
-        if action not in self.action_to_index:
-            raise ValueError(f"Action {action} not in action space")
-        return self.action_to_index[action]
-
-    def is_valid(self, action: Action) -> bool:
-        """Check if action is valid."""
-        return (
-            0 <= action.order_quantities[0] <= self.Q_max
-            and 0 <= action.order_quantities[1] <= self.Q_max
-        )
 
 
 def order_both_products(quantity_0: int, quantity_1: int) -> Action:
@@ -109,8 +76,3 @@ def order_both_products(quantity_0: int, quantity_1: int) -> Action:
         Action object
     """
     return Action(order_quantities=(quantity_0, quantity_1))
-
-
-def no_order_action() -> Action:
-    """Create a no-order action (0, 0)."""
-    return Action(order_quantities=(0, 0))

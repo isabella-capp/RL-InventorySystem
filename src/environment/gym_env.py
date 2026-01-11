@@ -25,18 +25,18 @@ class InventoryEnvironment(gym.Env):
 
     def __init__(
         self,
-        k: int = 32,
-        Q_max: int = 42,
-        episode_length: int = 365,
+        k: int = 30,
+        Q_max: int = 30,
+        episode_length: int = 1000,
         random_seed: Optional[int] = None,
     ):
         """
         Initialize environment.
 
         Args:
-            k: Number of historical frames to stack (default: 32)
-            Q_max: Maximum order quantity per product (default: 42)
-            episode_length: Steps per episode (default: 365)
+            k: Number of historical frames to stack (default: 30)
+            Q_max: Maximum order quantity per product (default: 30)
+            episode_length: Steps per episode (default: 1000)
             random_seed: Random seed for reproducibility
         """
         self.k = k
@@ -182,22 +182,6 @@ class InventoryEnvironment(gym.Env):
         if self.state_history is None:
             raise RuntimeError("Must call reset() first")
         return self.state_history
-
-    def render(self):
-        """Render current state (optional)."""
-        if self.state_history is None:
-            return
-
-        state = self.state_history.current_state
-        print(f"Step {self.current_step}:")
-        print(
-            f"  Product 0: net_inv={state.net_inventory[0]:4d}, outstanding={state.outstanding_orders[0]:3d}"
-        )
-        print(
-            f"  Product 1: net_inv={state.net_inventory[1]:4d}, outstanding={state.outstanding_orders[1]:3d}"
-        )
-        if self.episode_costs:
-            print(f"  Last cost: ${self.episode_costs[-1]:.2f}")
 
     def __str__(self):
         return (
