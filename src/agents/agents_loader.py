@@ -6,7 +6,9 @@ from typing import Dict, Optional, Tuple
 
 from stable_baselines3 import DQN, PPO
 
-from src.agents import Agent, DQNAgent, PPOAgent
+from src.agents.base import Agent
+from src.agents.dqn_agent import DQNAgent
+from src.agents.ppo_agent import PPOAgent
 from src.environment import InventoryEnvironment
 
 
