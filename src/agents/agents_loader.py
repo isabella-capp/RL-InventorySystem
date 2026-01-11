@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 from stable_baselines3 import DQN, PPO
 
-from src.agents import DQNAgent, PPOAgent
+from src.agents import Agent, DQNAgent, PPOAgent
 from src.environment import InventoryEnvironment
 
 
@@ -17,38 +18,37 @@ class AgentsLoader:
     for loading pre-trained models.
     """
 
-    def __init__(self, env: InventoryEnvironment, models_dir: Optional[Path] = None):
+    def __init__(
+        self,
+        models_dir: Optional[Path] = None,
+    ):
         """
         Initialize agent loader.
 
         Args:
-            env: Environment instance for agent compatibility
             models_dir: Directory containing saved models (default: ./models)
         """
-        self.env = env
         self.models_dir = Path(models_dir) if models_dir else Path("./models")
 
-        # Registry of available agent types
         self.agent_types = {
             "dqn": self._load_dqn,
             "ppo": self._load_ppo,
-            # Add more agent types here as you implement them:
-            # 'a2c': self._load_a2c,
         }
 
-        # Cache loaded agents
-        self._loaded_agents: Dict[str, DQNAgent] = {}
+        self._loaded_agents: Dict[str, Tuple[Agent, Dict]] = {}
 
-    def load_agent(self, model_id: str, agent_type: str = "dqn") -> DQNAgent:
+    def load_agent(
+        self, model_id: str, agent_type: str = "dqn"
+    ) -> Tuple[Agent, Dict[str, int]]:
         """
-        Load a trained agent.
+        Load a trained agent with its environment metadata.
 
         Args:
             model_id: Model identifier (e.g., 'dqn_baseline', 'dqn_20260108_104709')
             agent_type: Type of agent ('dqn', 'a2c', 'ppo', etc.)
 
         Returns:
-            Loaded agent instance
+            Tuple of (agent instance, metadata dict with k and Q_max)
 
         Raises:
             ValueError: If agent_type not supported
@@ -58,7 +58,8 @@ class AgentsLoader:
         cache_key = f"{agent_type}_{model_id}"
         if cache_key in self._loaded_agents:
             print(f"✅ Using cached agent: {cache_key}")
-            return self._loaded_agents[cache_key]
+            agent, metadata = self._loaded_agents[cache_key]
+            return agent, metadata
 
         # Load agent
         if agent_type not in self.agent_types:
@@ -68,58 +69,50 @@ class AgentsLoader:
             )
 
         print(f"📥 Loading {agent_type.upper()} agent: {model_id}...")
-        agent = self.agent_types[agent_type](model_id)
+        agent, metadata = self.agent_types[agent_type](model_id)
 
         # Cache and return
-        self._loaded_agents[cache_key] = agent
+        self._loaded_agents[cache_key] = (agent, metadata)
         print(f"✅ Agent loaded successfully")
-        return agent
+        return agent, metadata
 
-    def _load_dqn(self, model_id: str) -> DQNAgent:
-        """Load DQN agent from disk."""
+    def _load_generic(
+        self, model_id: str, agent_class: type, model_class: type
+    ) -> Tuple[Agent, Dict[str, int]]:
+        """Generic method to load any agent type with metadata."""
+
         model_path = self.models_dir / f"{model_id}"
+        metadata_path = self.models_dir / f"{model_id}_metadata.json"
 
-        # Check if file exists (with or without .zip extension)
         if not model_path.exists() and not Path(str(model_path) + ".zip").exists():
-            raise FileNotFoundError(
-                f"Model not found: {model_path}\n"
-                f"Available models in {self.models_dir}:\n"
-                + "\n".join(f"  - {f.stem}" for f in self.models_dir.glob("*.zip"))
-            )
+            raise FileNotFoundError(f"Model not found: {model_path}")
 
-        # Create agent wrapper with environment
-        agent = DQNAgent(
-            env=self.env,
-            verbose=0,
+        if metadata_path.exists():
+            with open(metadata_path, "r") as f:
+                metadata = json.load(f)
+        else:
+            raise FileNotFoundError(f"Metadata file not found: {metadata_path}")
+
+        agent_env = InventoryEnvironment(
+            k=metadata["k"],
+            Q_max=metadata["Q_max"],
+            episode_length=metadata.get("episode_length", 1000),
+            random_seed=42,
         )
 
-        # Load trained weights
-        agent.model = DQN.load(str(model_path), env=self.env)
+        agent = agent_class(env=agent_env, verbose=0)
 
-        return agent
+        agent.model = model_class.load(str(model_path), env=agent_env)
 
-    def _load_ppo(self, model_id: str) -> PPOAgent:
-        """Load PPO agent from disk."""
-        model_path = self.models_dir / f"{model_id}"
+        return agent, metadata
 
-        # Check if file exists (with or without .zip extension)
-        if not model_path.exists() and not Path(str(model_path) + ".zip").exists():
-            raise FileNotFoundError(
-                f"Model not found: {model_path}\n"
-                f"Available models in {self.models_dir}:\n"
-                + "\n".join(f"  - {f.stem}" for f in self.models_dir.glob("*.zip"))
-            )
+    def _load_dqn(self, model_id: str) -> Tuple[Agent, Dict[str, int]]:
+        """Load DQN agent from disk with metadata."""
+        return self._load_generic(model_id, DQNAgent, DQN)
 
-        # Create agent wrapper with environment
-        agent = PPOAgent(
-            env=self.env,
-            verbose=0,
-        )
-
-        # Load trained weights
-        agent.model = PPO.load(str(model_path), env=self.env)
-
-        return agent
+    def _load_ppo(self, model_id: str) -> Tuple[Agent, Dict[str, int]]:
+        """Load PPO agent from disk with metadata."""
+        return self._load_generic(model_id, PPOAgent, PPO)
 
     def list_available_models(self, agent_type: Optional[str] = None) -> list[str]:
         """

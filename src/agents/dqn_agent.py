@@ -154,15 +154,29 @@ class DQNAgent(Agent):
         self.total_steps = total_timesteps
 
     def save(self, path: Optional[Path] = None):
-        """Save model statistics."""
+        """Save model and environment metadata."""
+        import json
 
         if path is None:
             path = Path("./models")
 
         path.mkdir(parents=True, exist_ok=True)
 
+        # Save model weights
         self.model.save(path / "dqn_model")
-        print(f"DQN weights saved to {path}")
+        
+        # Save environment metadata
+        metadata = {
+            "k": self.env.k,
+            "Q_max": self.env.Q_max,
+            "episode_length": self.env.episode_length,
+        }
+        metadata_path = path / "dqn_model_metadata.json"
+        with open(metadata_path, "w") as f:
+            json.dump(metadata, f, indent=2)
+        
+        print(f"DQN model saved to {path}")
+        print(f"  Metadata: k={metadata['k']}, Q_max={metadata['Q_max']}")
 
     def load(self, path: Optional[Path] = None):
         """Load model from disk."""
